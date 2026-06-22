@@ -134,6 +134,29 @@ All settings are `FACESTACK_*` env vars (see `src/facestack/config.py`), e.g.
 `FACESTACK_MATCH_THRESHOLD`, `FACESTACK_MODEL_PACK`, `FACESTACK_REID_INTERVAL`,
 `FACESTACK_FORCE_PROVIDER`.
 
+## Threshold calibration
+
+`match_threshold` (default `0.40`) is the cosine cutoff for "same person". The
+default is a literature value; calibrate it on data that looks like your
+deployment. Lay out a labelled folder and run:
+
+```
+dataset/
+  alice/  a1.jpg a2.jpg ...      # variety matters: angles, distance, light,
+  bob/    b1.jpg ...             # glasses on/off — not near-identical frontals
+  carol/  ...
+
+LD_LIBRARY_PATH=$HOME/rocm-compat python scripts/calibrate.py dataset/
+```
+
+It prints the same-person vs different-person similarity distributions (the two
+should be cleanly separated), operating points (best-accuracy, EER, target-FAR),
+and a recommended threshold. Apply via `FACESTACK_MATCH_THRESHOLD=0.xx`.
+
+A 2–3 person set is a real-world *sanity check*, not a precise FAR measurement
+(that needs thousands of cross-person pairs, e.g. a public set like LFW in the
+same folder layout). The same script handles both.
+
 ## Tests
 
 ```bash
