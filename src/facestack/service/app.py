@@ -54,6 +54,16 @@ async def lifespan(app: FastAPI):
             log.info("Restored gallery from %s", config.index_path)
         except Exception as exc:  # noqa: BLE001
             log.warning("Could not load existing gallery: %s", exc)
+    # Warm up the GPU kernels (MIOpen compiles on first inference, ~seconds) so
+    # the first real request isn't slow.
+    try:
+        warm = np.zeros((config.det_size, config.det_size, 3), dtype=np.uint8)
+        rec.engine.detect(warm)
+        rec.engine.embed_crop(warm)  # exercises the recognition model too
+        log.info("Warmup complete (gpu=%s)", rec.engine.on_gpu)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Warmup skipped: %s", exc)
+
     app.state.recognizer = rec
     yield
 

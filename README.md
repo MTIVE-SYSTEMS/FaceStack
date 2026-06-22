@@ -105,6 +105,29 @@ uvicorn facestack.service.app:app --host 0.0.0.0 --port 8000
 | POST | `/index/save` · `/index/load` | persist / restore gallery |
 | WS | `/stream/recognize` | per-frame recognition for live video |
 
+## Performance
+
+Measured on motis (RX 7900 XT, ROCm 7.2.4, ROCMExecutionProvider), warmed up,
+6-face frame:
+
+| pack / det_size | detect-only | detect+embed all (naïve) | **video (steady)** |
+|---|---|---|---|
+| buffalo_l / 640 | 267 FPS | 14.5 FPS | **184 FPS** |
+| buffalo_l / 320 | 457 FPS | 15.1 FPS | **267 FPS** |
+| buffalo_s / 640 | 247 FPS | 18.2 FPS | **217 FPS** |
+| buffalo_s / 320 | 378 FPS | 18.6 FPS | **302 FPS** |
+
+The live-video win comes from splitting detection (every frame) from embedding
+(only on first sight / every `reid_interval` frames, identity cached per track) —
+~12–20× over embedding every face every frame. Even the most accurate config
+(`buffalo_l` / 640) clears real-time (~30 FPS) with large margin, so it stays the
+default; drop `det_size` to 320 or switch to `buffalo_s` only if you need more
+headroom and can accept slightly lower accuracy on small/distant faces.
+
+> Benchmark feeds a static frame (very stable tracks); real footage re-embeds
+> more often as faces enter/move, so expect throughput between the naïve and
+> steady-state columns — still well above real-time. Run `scripts/bench.py`.
+
 ## Config
 
 All settings are `FACESTACK_*` env vars (see `src/facestack/config.py`), e.g.
