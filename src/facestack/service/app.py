@@ -70,7 +70,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         r = rec()
         return HealthResponse(
             status="ok",
-            providers=r.engine.providers,
+            providers=r.engine.active_providers,
             on_gpu=r.engine.on_gpu,
             gallery_size=len(r.index),
             people=len(r.index.people),

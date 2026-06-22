@@ -41,24 +41,34 @@ pip install -e .
 python scripts/check_env.py
 ```
 
-## Deploy on motis (AMD GPU / ROCm)
+## Deploy on motis (AMD GPU / ROCm) — verified
 
-`motis` has an RX 7900 XT (RDNA3, `gfx1100`) on **ROCm 7.2.4** — verified working.
-Swap the CPU runtime for the ROCm one:
+`motis`: RX 7900 XT (RDNA3, `gfx1100`), **ROCm 7.2.4**. After the base install above
+(which puts CPU `onnxruntime` in the venv), enable the GPU:
 
 ```bash
-pip uninstall -y onnxruntime
-pip install onnxruntime-rocm==1.22.2.post1   # PyPI; provides ROCMExecutionProvider
-python scripts/check_env.py                  # expect ROCMExecutionProvider in the list
+bash scripts/setup_rocm_motis.sh                       # ROCm-EP wheel + compat symlink
+LD_LIBRARY_PATH=$HOME/rocm-compat python scripts/check_env.py   # expect ROCMExecutionProvider
+bash scripts/serve.sh                                  # serves with LD_LIBRARY_PATH set
 ```
 
-The code picks `ROCMExecutionProvider` automatically; no code change needed.
+Validated end-to-end on the GPU: correct match + correct rejection, GPU
+utilisation ~82% under load. `on_gpu`/`GET /healthz` report the provider the
+session *actually* loaded, so a silent CPU fallback is visible, not hidden.
 
-> **Do not use the MIGraphX execution provider on motis.** AMD's
-> `rocm-rel-7.2.4` MIGraphX wheel returns numerically wrong SCRFD output, and the
-> PyPI wheel's MIGraphX lib is linked against ROCm 6 and won't load on ROCm 7.
-> `runtime.py` excludes MIGraphX from auto-selection for this reason; ROCm EP is
-> correct and was validated end-to-end (correct match + correct rejection).
+### The AMD ROCm 7.2.4 onnxruntime trap (why the script exists)
+
+- **MIGraphX EP is unusable.** AMD's `rocm-rel-7.2.4` MIGraphX wheel returns
+  numerically wrong SCRFD output (thousands of phantom detections); the PyPI
+  wheel's MIGraphX lib links ROCm 6 and won't load. `runtime.py` excludes
+  MIGraphX from auto-selection.
+- **No plain ROCm-EP wheel ships for 7.2.x.** The ROCm-EP wheel built for **7.0**
+  (`onnxruntime_rocm-1.22.1`) is ABI-compatible with 7.2.4 — except it needs
+  `librocm_smi64.so.7` while 7.2.4 ships `.so.1`. The setup script symlinks it
+  (rocm_smi is device-introspection only, not the compute path).
+- The PyPI `onnxruntime-rocm` (ROCm 6) silently falls back to CPU here — avoid it.
+
+A `docker/Dockerfile.rocm` is provided as a reproducible alternative.
 
 ## Library usage
 

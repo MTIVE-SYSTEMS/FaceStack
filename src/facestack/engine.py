@@ -54,16 +54,30 @@ class FaceEngine:
         )
         # ArcFace recognition model, reused directly for the cropped-face fallback.
         self.rec = self.app.models["recognition"]
+
+        # Truth, not intent: a requested GPU provider can silently fail to load
+        # (missing/ABI-mismatched ROCm libs) and ONNX Runtime falls back to CPU.
+        # Read back what the real session actually applied.
+        self.active_providers = list(self.app.models["detection"].session.get_providers())
+        if not using_gpu(self.active_providers) and using_gpu(self.providers):
+            log.warning(
+                "Requested GPU (%s) but session applied %s — running on CPU. "
+                "Check ROCm libs / LD_LIBRARY_PATH.",
+                self.providers,
+                self.active_providers,
+            )
         log.info(
-            "FaceEngine ready: pack=%s providers=%s gpu=%s",
+            "FaceEngine ready: pack=%s requested=%s active=%s gpu=%s",
             self.config.model_pack,
             self.providers,
-            using_gpu(self.providers),
+            self.active_providers,
+            using_gpu(self.active_providers),
         )
 
     @property
     def on_gpu(self) -> bool:
-        return using_gpu(self.providers)
+        """True only if a GPU provider was actually loaded by the session."""
+        return using_gpu(self.active_providers)
 
     # --- full frame: locate then embed ---
     def embed_frame(self, img_bgr: np.ndarray) -> list[DetectedFace]:
