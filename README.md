@@ -12,6 +12,7 @@ Reusable as a Python library or as a REST/WebSocket service. Targets AMD ROCm
 
 | Doc | What's in it |
 |---|---|
+| [docs/integration.md](docs/integration.md) | **Self-contained integration spec — hand this to another agent/dev** |
 | [docs/architecture.md](docs/architecture.md) | Components, pipeline, design decisions |
 | [docs/usage.md](docs/usage.md) | Library API + live-video usage |
 | [docs/api.md](docs/api.md) | REST + WebSocket reference with examples |
