@@ -34,3 +34,18 @@ class Config(BaseSettings):
     reid_interval: int = 15
     track_iou_threshold: float = 0.3
     track_max_age: int = 30  # frames a track survives without a detection
+
+    # --- Service / access control ---
+    # Comma-separated API keys. Empty = auth disabled (dev). When set, every /v1
+    # request must send a matching `X-API-Key` header. Keep keys in .env, not code.
+    api_keys: str = ""
+    # Comma-separated CORS origins for browser clients. Empty = CORS disabled.
+    cors_origins: str = ""
+
+    @property
+    def api_key_set(self) -> set[str]:
+        return {k.strip() for k in self.api_keys.split(",") if k.strip()}
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

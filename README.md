@@ -107,13 +107,18 @@ uvicorn facestack.service.app:app --host 0.0.0.0 --port 8000
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/healthz` | liveness, provider, gallery size |
-| POST | `/enroll` | save a face (`person_id`, `file`, `cropped`) |
-| POST | `/recognize` | recognise faces in an image (`file`, `cropped`) |
-| GET | `/identities` | list enrolled people |
-| DELETE | `/identities/{id}` | remove a person |
-| POST | `/index/save` · `/index/load` | persist / restore gallery |
-| WS | `/stream/recognize` | per-frame recognition for live video |
+| GET | `/healthz` | liveness, provider, gallery size (no auth) |
+| POST | `/v1/enroll` | save a face (`person_id`, `file`, `cropped`) |
+| POST | `/v1/recognize` | recognise faces in an image (`file`, `cropped`) |
+| GET | `/v1/identities` | list enrolled people |
+| DELETE | `/v1/identities/{id}` | remove a person |
+| POST | `/v1/index/save` · `/v1/index/load` | persist / restore gallery |
+| WS | `/v1/stream/recognize` | per-frame recognition for live video |
+
+**Auth:** set `FACESTACK_API_KEYS` (comma-separated, in `.env`); every `/v1`
+request then needs a matching `X-API-Key` header. Empty ⇒ open (dev only).
+**Client:** drop-in Python SDK at [`client/facestack_client.py`](client/facestack_client.py)
+(`requests`-only). See [docs/api.md](docs/api.md).
 
 ## Performance
 

@@ -1,13 +1,16 @@
 """FastAPI service exposing the recognition engine over REST + WebSocket.
 
-Endpoints
-  GET  /healthz                  - liveness + provider/gallery info
-  POST /enroll                   - save a face under a person_id
-  POST /recognize                - recognise faces in an image
-  GET  /identities               - list enrolled people
-  DELETE /identities/{person_id} - remove a person from the gallery
-  POST /index/save | /index/load - persist / restore the gallery
-  WS   /stream/recognize         - per-frame recognition for live video
+All functional endpoints live under /v1 and require an `X-API-Key` header when
+api_keys is configured. /healthz stays unversioned and unauthenticated for
+liveness probes.
+
+  GET  /healthz                     - liveness + provider/gallery info (no auth)
+  POST /v1/enroll                   - save a face under a person_id
+  POST /v1/recognize                - recognise faces in an image
+  GET  /v1/identities               - list enrolled people
+  DELETE /v1/identities/{person_id} - remove a person from the gallery
+  POST /v1/index/save | /v1/index/load - persist / restore the gallery
+  WS   /v1/stream/recognize         - per-frame recognition for live video
 """
 
 from __future__ import annotations
@@ -18,7 +21,19 @@ from contextlib import asynccontextmanager
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
 
 from ..config import Config
 from ..recognizer import Recognizer
@@ -65,16 +80,35 @@ async def lifespan(app: FastAPI):
         log.warning("Warmup skipped: %s", exc)
 
     app.state.recognizer = rec
+    auth = "on" if config.api_key_set else "OFF (open)"
+    log.info("Service ready: auth=%s cors=%s", auth, config.cors_origin_list or "disabled")
     yield
 
 
 def create_app(config: Config | None = None) -> FastAPI:
+    config = config or Config()
     app = FastAPI(title="FaceStack", version="0.1.0", lifespan=lifespan)
-    app.state.config = config or Config()
+    app.state.config = config
+
+    if config.cors_origin_list:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=config.cors_origin_list,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     def rec() -> Recognizer:
         return app.state.recognizer
 
+    def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+        allowed = config.api_key_set
+        if not allowed:
+            return  # auth disabled (dev)
+        if x_api_key is None or x_api_key not in allowed:
+            raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+
+    # /healthz is unversioned + unauthenticated (liveness probes)
     @app.get("/healthz", response_model=HealthResponse)
     def healthz() -> HealthResponse:
         r = rec()
@@ -86,7 +120,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             people=len(r.index.people),
         )
 
-    @app.post("/enroll", response_model=EnrollResponse)
+    v1 = APIRouter(prefix="/v1", dependencies=[Depends(require_api_key)])
+
+    @v1.post("/enroll", response_model=EnrollResponse)
     async def enroll(
         person_id: str = Form(...),
         file: UploadFile = File(...),
@@ -94,15 +130,14 @@ def create_app(config: Config | None = None) -> FastAPI:
     ) -> EnrollResponse:
         img = _decode(await file.read())
         if cropped:
-            ok = rec().enroll_crop(person_id, img)
-            count = 1 if ok else 0
+            count = 1 if rec().enroll_crop(person_id, img) else 0
         else:
             count = rec().enroll_frame(person_id, img)
         if count == 0:
             raise HTTPException(status_code=422, detail="No face could be enrolled")
         return EnrollResponse(person_id=person_id, enrolled=count)
 
-    @app.post("/recognize", response_model=RecognizeResponse)
+    @v1.post("/recognize", response_model=RecognizeResponse)
     async def recognize(
         file: UploadFile = File(...),
         cropped: bool = Form(False),
@@ -126,31 +161,40 @@ def create_app(config: Config | None = None) -> FastAPI:
             ]
         )
 
-    @app.get("/identities", response_model=IdentitiesResponse)
+    @v1.get("/identities", response_model=IdentitiesResponse)
     def identities() -> IdentitiesResponse:
         people = rec().index.people
         return IdentitiesResponse(count=len(people), people=people)
 
-    @app.delete("/identities/{person_id}", response_model=OkResponse)
+    @v1.delete("/identities/{person_id}", response_model=OkResponse)
     def delete_identity(person_id: str) -> OkResponse:
         removed = rec().index.remove_person(person_id)
         if removed == 0:
             raise HTTPException(status_code=404, detail="Unknown person_id")
         return OkResponse(detail=f"Removed {removed} embeddings")
 
-    @app.post("/index/save", response_model=OkResponse)
+    @v1.post("/index/save", response_model=OkResponse)
     def index_save() -> OkResponse:
         rec().save()
         return OkResponse(detail="Gallery saved")
 
-    @app.post("/index/load", response_model=OkResponse)
+    @v1.post("/index/load", response_model=OkResponse)
     def index_load() -> OkResponse:
         rec().load()
         return OkResponse(detail="Gallery loaded")
 
-    @app.websocket("/stream/recognize")
+    @v1.websocket("/stream/recognize")
     async def stream_recognize(ws: WebSocket) -> None:
-        """Client sends binary JPEG/PNG frames; server replies with JSON per frame."""
+        """Client sends binary JPEG/PNG frames; server replies with JSON per frame.
+
+        Auth: send the key as header `X-API-Key` or query param `?api_key=`.
+        """
+        allowed = config.api_key_set
+        if allowed:
+            key = ws.headers.get("x-api-key") or ws.query_params.get("api_key")
+            if key not in allowed:
+                await ws.close(code=1008)  # policy violation
+                return
         await ws.accept()
         video = VideoRecognizer(rec())
         try:
@@ -179,6 +223,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         except WebSocketDisconnect:
             log.info("Stream client disconnected")
 
+    app.include_router(v1)
     return app
 
 

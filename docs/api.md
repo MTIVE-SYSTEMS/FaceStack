@@ -4,88 +4,91 @@ Start the service:
 
 ```bash
 bash scripts/serve.sh                 # uses LD_LIBRARY_PATH + FACESTACK_* env
-# or directly:
-uvicorn facestack.service.app:app --host 0.0.0.0 --port 8000
+# or: uvicorn facestack.service.app:app --host 0.0.0.0 --port 8000
 ```
 
 On motis it runs as a systemd service on port **8011** (see [deployment.md](deployment.md)).
-Interactive docs are served at `/docs` (Swagger UI).
+Interactive docs: `/docs` (Swagger UI). All functional endpoints are under **`/v1`**.
+
+## Authentication
+
+Set one or more keys via `FACESTACK_API_KEYS` (comma-separated, keep them in
+`.env`). Every `/v1` request must then send a matching `X-API-Key` header:
+
+```bash
+export FACESTACK_API_KEYS="proj-a-key,proj-b-key"   # in motis ~/FaceStack/.env
+curl -H "X-API-Key: proj-a-key" ...
+```
+
+- No keys configured ⇒ auth is **disabled** (open) — only for local dev.
+- Missing/invalid key ⇒ `401`. `/healthz` is always open (liveness probes).
 
 ## Endpoints
 
-### `GET /healthz`
-Liveness + the provider actually loaded.
+### `GET /healthz`  (no auth)
 ```json
 { "status": "ok", "providers": ["ROCMExecutionProvider","CPUExecutionProvider"],
   "on_gpu": true, "gallery_size": 12, "people": 3 }
 ```
 
-### `POST /enroll`
-Save a face. `multipart/form-data`: `person_id` (str), `file` (image),
-`cropped` (bool, default false — set true if `file` is already a cropped face).
+### `POST /v1/enroll`
+`multipart/form-data`: `person_id` (str), `file` (image), `cropped` (bool,
+default false — true if `file` is already a cropped face). `422` if no face found.
 ```bash
-curl -F person_id=ahmet -F file=@ahmet.jpg http://motis:8011/enroll
+curl -H "X-API-Key: $KEY" -F person_id=ahmet -F file=@ahmet.jpg http://motis:8011/v1/enroll
 # {"person_id":"ahmet","enrolled":1}
 ```
-`422` if no face could be enrolled.
 
-### `POST /recognize`
-Recognise faces in an image. Form: `file` (image), `cropped` (bool, default false).
+### `POST /v1/recognize`
+Form: `file` (image), `cropped` (bool, default false).
 ```bash
-curl -F file=@group.jpg http://motis:8011/recognize
+curl -H "X-API-Key: $KEY" -F file=@group.jpg http://motis:8011/v1/recognize
 ```
 ```json
 { "faces": [
-  { "bbox": [x1,y1,x2,y2], "det_score": 0.92,
-    "person_id": "ahmet", "similarity": 0.71, "matched": true },
-  { "bbox": [...], "det_score": 0.88,
-    "person_id": null, "similarity": 0.13, "matched": false }
+  { "bbox":[x1,y1,x2,y2], "det_score":0.92, "person_id":"ahmet", "similarity":0.71, "matched":true },
+  { "bbox":[...], "det_score":0.88, "person_id":null, "similarity":0.13, "matched":false }
 ] }
 ```
-`person_id` is `null` and `matched` false when no enrolled face clears the threshold.
+`person_id` is `null` / `matched` false when nothing clears the threshold.
 
-### `GET /identities`
+### `GET /v1/identities`
+`{ "count": 3, "people": ["ahmet","aras","yigithan"] }`
+
+### `DELETE /v1/identities/{person_id}`
+`404` if unknown. `{ "ok": true, "detail": "Removed 2 embeddings" }`
+
+### `POST /v1/index/save` · `POST /v1/index/load`
+Persist / restore the gallery (configured paths). The service also auto-loads an
+existing gallery on startup.
+
+### `WS /v1/stream/recognize`
+Live video. Send **binary** JPEG/PNG frames; receive one JSON message per frame.
+Auth: `X-API-Key` header or `?api_key=` query param.
 ```json
-{ "count": 3, "people": ["ahmet","aras","yigithan"] }
+{ "faces": [ { "track_id":4, "bbox":[...], "person_id":"ahmet", "similarity":0.69, "matched":true } ] }
 ```
 
-### `DELETE /identities/{person_id}`
-Remove a person from the gallery. `404` if unknown. `{ "ok": true, "detail": "Removed 2 embeddings" }`
+## Python client SDK
 
-### `POST /index/save` · `POST /index/load`
-Persist / restore the gallery to the configured paths. The service also
-auto-loads an existing gallery on startup.
+Drop `client/facestack_client.py` into your project (`pip install requests`):
 
-### `WS /stream/recognize`
-Live video. Client sends **binary** JPEG/PNG frames; server replies with one JSON
-message per frame:
-```json
-{ "faces": [
-  { "track_id": 4, "bbox": [x1,y1,x2,y2],
-    "person_id": "ahmet", "similarity": 0.69, "matched": true }
-] }
-```
-
-Python client:
 ```python
-import asyncio, cv2, websockets, json
+from facestack_client import FaceStackClient
 
-async def main():
-    cap = cv2.VideoCapture(0)
-    async with websockets.connect("ws://motis:8011/stream/recognize") as ws:
-        while True:
-            ok, frame = cap.read()
-            if not ok: break
-            _, buf = cv2.imencode(".jpg", frame)
-            await ws.send(buf.tobytes())
-            print(json.loads(await ws.recv())["faces"])
-
-asyncio.run(main())
+fs = FaceStackClient("http://motis:8011", api_key="proj-a-key")
+fs.enroll("ahmet", "ahmet.jpg")            # path, bytes, or file-like
+for face in fs.recognize("group.jpg"):
+    print(face["person_id"], round(face["similarity"], 3), face["matched"])
+fs.identities(); fs.save()
 ```
+
+It depends only on `requests` — no insightface/onnxruntime — so any project can
+use it without the engine's heavy deps.
 
 ## Typical flow
 
-1. `POST /enroll` each person (a few varied shots).
-2. `POST /index/save` to persist.
-3. `POST /recognize` (images) or `WS /stream/recognize` (video) to identify.
+1. `POST /v1/enroll` each person (a few varied shots).
+2. `POST /v1/index/save` to persist.
+3. `POST /v1/recognize` (images) or `WS /v1/stream/recognize` (video) to identify.
 4. Tune `FACESTACK_MATCH_THRESHOLD` after [calibration](calibration.md).
