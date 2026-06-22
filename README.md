@@ -43,16 +43,22 @@ python scripts/check_env.py
 
 ## Deploy on motis (AMD GPU / ROCm)
 
-`motis` has an RX 7900 XT (RDNA3, `gfx1100`). Swap the CPU runtime for the ROCm one:
+`motis` has an RX 7900 XT (RDNA3, `gfx1100`) on **ROCm 7.2.4** — verified working.
+Swap the CPU runtime for the ROCm one:
 
 ```bash
 pip uninstall -y onnxruntime
-pip install onnxruntime-rocm        # from AMD's ROCm wheel index for your ROCm version
-python scripts/check_env.py         # expect ROCMExecutionProvider in the list
+pip install onnxruntime-rocm==1.22.2.post1   # PyPI; provides ROCMExecutionProvider
+python scripts/check_env.py                  # expect ROCMExecutionProvider in the list
 ```
 
 The code picks `ROCMExecutionProvider` automatically; no code change needed.
-A `docker/Dockerfile.rocm` is provided for a reproducible GPU image.
+
+> **Do not use the MIGraphX execution provider on motis.** AMD's
+> `rocm-rel-7.2.4` MIGraphX wheel returns numerically wrong SCRFD output, and the
+> PyPI wheel's MIGraphX lib is linked against ROCm 6 and won't load on ROCm 7.
+> `runtime.py` excludes MIGraphX from auto-selection for this reason; ROCm EP is
+> correct and was validated end-to-end (correct match + correct rejection).
 
 ## Library usage
 

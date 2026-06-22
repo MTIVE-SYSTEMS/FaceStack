@@ -1,6 +1,7 @@
-# FaceStack on AMD ROCm (motis: RX 7900 XT / RDNA3 / gfx1100)
-# Base image tag must match the ROCm version installed on the host.
-FROM rocm/dev-ubuntu-22.04:6.2-complete
+# FaceStack on AMD ROCm (motis: RX 7900 XT / RDNA3 / gfx1100, ROCm 7.2.4)
+# NOTE: motis is provisioned with a native venv (see README) — this image is a
+# reproducible alternative. Base tag should match the host ROCm major version.
+FROM rocm/dev-ubuntu-22.04:7.2-complete
 
 ENV DEBIAN_FRONTEND=noninteractive \
     HSA_OVERRIDE_GFX_VERSION=11.0.0 \
@@ -18,7 +19,7 @@ COPY src ./src
 RUN python3.12 -m pip install -U pip && \
     python3.12 -m pip install -r requirements.txt && \
     python3.12 -m pip uninstall -y onnxruntime && \
-    python3.12 -m pip install onnxruntime-rocm && \
+    python3.12 -m pip install onnxruntime-rocm==1.22.2.post1 && \
     python3.12 -m pip install -e .
 
 # Models download to ~/.insightface on first run; mount a volume to cache them.

@@ -12,9 +12,15 @@ import logging
 log = logging.getLogger("facestack.runtime")
 
 # Preference order, best first. ROCm is the target on motis (RX 7900 XT / RDNA3).
+#
+# MIGraphX is deliberately NOT in the default list: on motis (ROCm 7.2.4) it is
+# unusable both ways we tried it — AMD's rocm-rel-7.2.4 migraphx wheel produces
+# numerically wrong SCRFD output (thousands of phantom detections), and the PyPI
+# onnxruntime-rocm wheel ships a MIGraphX provider lib linked against ROCm 6
+# (libamdhip64.so.6) that won't load on ROCm 7. ROCMExecutionProvider is correct
+# and clean. MIGraphX can still be forced explicitly via force_provider.
 _PREFERENCE = [
     "ROCMExecutionProvider",
-    "MIGraphXExecutionProvider",
     "CUDAExecutionProvider",
     "CPUExecutionProvider",
 ]
