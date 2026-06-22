@@ -19,6 +19,10 @@ data/
 *.bin
 indexes/
 
+# Calibration / personal face data — never commit
+dataset/
+_excluded/
+
 # Env / secrets
 .env
 .env.*
