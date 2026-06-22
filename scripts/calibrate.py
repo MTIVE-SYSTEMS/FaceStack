@@ -51,11 +51,11 @@ def load_dataset(root: str) -> dict[str, list[str]]:
 
 
 def embed_all(engine: FaceEngine, people: dict[str, list[str]]):
-    """Return {person: [embeddings]} and a count of images with no detectable face."""
-    embeds: dict[str, list[np.ndarray]] = {}
+    """Return {person: [(path, embedding)]} and a count of images with no face."""
+    embeds: dict[str, list[tuple[str, np.ndarray]]] = {}
     skipped = 0
     for person, paths in people.items():
-        vecs = []
+        items = []
         for p in paths:
             img = cv2.imread(p)
             if img is None:
@@ -68,32 +68,45 @@ def embed_all(engine: FaceEngine, people: dict[str, list[str]]):
                 skipped += 1
                 continue
             best = max(faces, key=lambda f: f.det_score)  # one face per image
-            vecs.append(best.embedding)
-        if vecs:
-            embeds[person] = vecs
+            if len(faces) > 1:
+                print(f"  ~ {len(faces)} faces in {p}, kept highest-confidence", file=sys.stderr)
+            items.append((p, best.embedding))
+        if items:
+            embeds[person] = items
     return embeds, skipped
 
 
-def make_pairs(embeds: dict[str, list[np.ndarray]], max_diff: int, seed: int = 0):
-    same, diff = [], []
-    for vecs in embeds.values():
-        for a, b in itertools.combinations(vecs, 2):
-            same.append(float(np.dot(a, b)))
+def _label(person: str, path: str) -> str:
+    return f"{person}/{os.path.basename(path)}"
+
+
+def recommend_floor(diff: np.ndarray) -> float:
+    """A same-person pair below this overlaps impostor territory => suspicious."""
+    return float(np.percentile(diff, 95)) if diff.size else 0.0
+
+
+def make_pairs(embeds: dict[str, list[tuple[str, np.ndarray]]], max_diff: int, seed: int = 0):
+    """Return (sims, labels) for same- and different-person pairs."""
+    same_s, same_l = [], []
+    for person, items in embeds.items():
+        for (pa, a), (pb, b) in itertools.combinations(items, 2):
+            same_s.append(float(np.dot(a, b)))
+            same_l.append((_label(person, pa), _label(person, pb)))
 
     people = list(embeds.keys())
     rng = np.random.default_rng(seed)
-    cross = [(i, j) for i in range(len(people)) for j in range(i + 1, len(people))]
-    # collect all cross-person image pairs, then sample for speed if huge
     all_diff = []
-    for i, j in cross:
-        for a in embeds[people[i]]:
-            for b in embeds[people[j]]:
-                all_diff.append((a, b))
+    for i in range(len(people)):
+        for j in range(i + 1, len(people)):
+            for pa, a in embeds[people[i]]:
+                for pb, b in embeds[people[j]]:
+                    all_diff.append((float(np.dot(a, b)), (_label(people[i], pa), _label(people[j], pb))))
     if len(all_diff) > max_diff:
         idx = rng.choice(len(all_diff), size=max_diff, replace=False)
         all_diff = [all_diff[k] for k in idx]
-    diff = [float(np.dot(a, b)) for a, b in all_diff]
-    return np.array(same), np.array(diff)
+    diff_s = [s for s, _ in all_diff]
+    diff_l = [lbl for _, lbl in all_diff]
+    return np.array(same_s), same_l, np.array(diff_s), diff_l
 
 
 def summarize(name: str, x: np.ndarray) -> None:
@@ -126,7 +139,7 @@ def main() -> int:
     n_imgs = sum(len(v) for v in embeds.values())
     print(f"\nEmbedded {n_imgs} faces ({skipped} images skipped: unreadable / no face).")
 
-    same, diff = make_pairs(embeds, args.max_diff_pairs)
+    same, same_l, diff, diff_l = make_pairs(embeds, args.max_diff_pairs)
     if same.size == 0:
         print("No same-person pairs — give each person >=2 images.", file=sys.stderr)
         return 2
@@ -170,12 +183,16 @@ def main() -> int:
     else:
         print(f"  FAR<={args.target_far:.3f}  : not reachable with this little data")
 
-    # worst cases help spot bad enrollment images
-    print("\nHardest pairs (inspect these images):")
-    if same.size:
-        print(f"  lowest same-person sim : {same.min():.3f}  (a true pair that barely matches)")
-    if diff.size:
-        print(f"  highest different sim  : {diff.max():.3f}  (two different people looking alike)")
+    # worst cases help spot bad / mislabelled images — name the actual files
+    print("\nWorst same-person pairs (should be HIGH — low means a bad/mislabelled image):")
+    for k in np.argsort(same)[:5]:
+        a, b = same_l[k]
+        flag = "  <-- suspicious" if same[k] < recommend_floor(diff) else ""
+        print(f"  sim={same[k]:.3f}  {a}  vs  {b}{flag}")
+    print("\nWorst different-person pairs (should be LOW — high means look-alikes):")
+    for k in np.argsort(diff)[::-1][:5]:
+        a, b = diff_l[k]
+        print(f"  sim={diff[k]:.3f}  {a}  vs  {b}")
 
     rec = eer_t
     print(f"\nRecommended FACESTACK_MATCH_THRESHOLD = {rec:.2f}   (current default: 0.40)")
