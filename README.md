@@ -8,6 +8,16 @@ comes in; for already-cropped faces it is skipped.
 Reusable as a Python library or as a REST/WebSocket service. Targets AMD ROCm
 (RX 7900 XT on `motis`) with a transparent CPU fallback.
 
+## Documentation
+
+| Doc | What's in it |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Components, pipeline, design decisions |
+| [docs/usage.md](docs/usage.md) | Library API + live-video usage |
+| [docs/api.md](docs/api.md) | REST + WebSocket reference with examples |
+| [docs/deployment.md](docs/deployment.md) | Dev/CPU, motis ROCm setup, systemd, env vars |
+| [docs/calibration.md](docs/calibration.md) | Threshold calibration workflow |
+
 ## Architecture
 
 ```
