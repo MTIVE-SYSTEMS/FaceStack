@@ -1,0 +1,23 @@
+# --- FaceStack core dependencies (Python 3.12) ---
+# Models & inference
+insightface==0.7.3
+onnx>=1.16,<2
+numpy>=1.26,<2.1
+opencv-python-headless>=4.9
+pillow>=10.2
+
+# Vector search (in-memory, <10K identities)
+hnswlib>=0.8.0
+
+# Service layer
+fastapi>=0.111
+uvicorn[standard]>=0.29
+pydantic>=2.7
+pydantic-settings>=2.2
+python-multipart>=0.0.9
+
+# --- ONNX Runtime ---
+# DEV (this machine / CPU): onnxruntime
+# DEPLOY (motis / AMD GPU): pip install onnxruntime-rocm  (see README — ROCm section)
+# Keep ONLY ONE of the two installed at a time.
+onnxruntime>=1.18

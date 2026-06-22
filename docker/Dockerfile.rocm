@@ -1,0 +1,26 @@
+# FaceStack on AMD ROCm (motis: RX 7900 XT / RDNA3 / gfx1100)
+# Base image tag must match the ROCm version installed on the host.
+FROM rocm/dev-ubuntu-22.04:6.2-complete
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    HSA_OVERRIDE_GFX_VERSION=11.0.0 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.12 python3.12-venv python3-pip \
+        libgl1 libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt pyproject.toml ./
+COPY src ./src
+
+RUN python3.12 -m pip install -U pip && \
+    python3.12 -m pip install -r requirements.txt && \
+    python3.12 -m pip uninstall -y onnxruntime && \
+    python3.12 -m pip install onnxruntime-rocm && \
+    python3.12 -m pip install -e .
+
+# Models download to ~/.insightface on first run; mount a volume to cache them.
+EXPOSE 8000
+CMD ["uvicorn", "facestack.service.app:app", "--host", "0.0.0.0", "--port", "8000"]

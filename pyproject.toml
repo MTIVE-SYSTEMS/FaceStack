@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "facestack"
+version = "0.1.0"
+description = "Fast, efficient and accurate face recognition engine (detection + ArcFace embeddings + vector search) served over REST."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+authors = [{ name = "MTIVE SYSTEMS" }]
+license = { text = "Proprietary" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
