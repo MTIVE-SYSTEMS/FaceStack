@@ -93,6 +93,41 @@ class FaceEngine:
             for f in faces
         ]
 
+    # --- detection only (no embedding) — this is the per-frame cost in video ---
+    def detect(
+        self, img_bgr: np.ndarray
+    ) -> list[tuple[tuple[float, float, float, float], float, np.ndarray | None]]:
+        """Locate faces WITHOUT embedding them. Returns (bbox, det_score, kps).
+
+        Splitting detection from embedding is what makes live video cheap: the
+        detector runs every frame, the (heavier) ArcFace embedder only when a
+        track needs (re)identification.
+        """
+        # det threshold was set on the model in prepare(); detect() reads it.
+        bboxes, kpss = self.app.det_model.detect(img_bgr, max_num=0, metric="default")
+        out: list[tuple[tuple[float, float, float, float], float, np.ndarray | None]] = []
+        if bboxes is None:
+            return out
+        for i in range(bboxes.shape[0]):
+            bbox = (float(bboxes[i, 0]), float(bboxes[i, 1]), float(bboxes[i, 2]), float(bboxes[i, 3]))
+            score = float(bboxes[i, 4])
+            kps = kpss[i] if kpss is not None else None
+            out.append((bbox, score, kps))
+        return out
+
+    # --- embed a single already-located face, aligned via its landmarks ---
+    def embed_aligned(self, img_bgr: np.ndarray, kps: np.ndarray) -> np.ndarray:
+        """ArcFace embedding for one face given its 5-point landmarks.
+
+        Uses the exact alignment insightface uses internally, so embeddings are
+        interchangeable with those from embed_frame / embed_crop.
+        """
+        from insightface.utils import face_align
+
+        aimg = face_align.norm_crop(img_bgr, landmark=kps, image_size=112)
+        feat = self.rec.get_feat(aimg)
+        return _l2norm(np.asarray(feat, dtype=np.float32).flatten())
+
     # --- cropped face: embed directly ---
     def embed_crop(self, img_bgr: np.ndarray) -> DetectedFace | None:
         """Embed an already-cropped face.

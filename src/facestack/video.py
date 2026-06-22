@@ -64,7 +64,8 @@ class VideoRecognizer:
         self._next_track_id = 0
 
     def process_frame(self, img_bgr: np.ndarray) -> list[TrackedFace]:
-        faces = self.rec.engine.embed_frame(img_bgr)
+        # Detection only — runs every frame. Embedding is deferred to re-id below.
+        detections = self.rec.engine.detect(img_bgr)
 
         # age all tracks; survivors get reset when matched below
         for t in self._tracks.values():
@@ -74,19 +75,22 @@ class VideoRecognizer:
         assigned: set[int] = set()
         results: list[TrackedFace] = []
 
-        for face in faces:
-            tid = self._assign(face.bbox, assigned)
+        for bbox, det_score, kps in detections:
+            tid = self._assign(bbox, assigned)
             if tid is None:
-                tid = self._spawn(face.bbox, face.det_score)
+                tid = self._spawn(bbox, det_score)
             assigned.add(tid)
             track = self._tracks[tid]
-            track.bbox = face.bbox
-            track.det_score = face.det_score
+            track.bbox = bbox
+            track.det_score = det_score
             track.age = 0
 
-            # Re-identify only on first sight or every reid_interval frames.
-            if track.frames_since_reid >= self.config.reid_interval:
-                m = self.rec.index.recognize(face.embedding)
+            # Embed + match ONLY on first sight or every reid_interval frames.
+            # This is the optimization: identity is cached per track, so the
+            # heavy ArcFace embedding does not run on every frame.
+            if track.frames_since_reid >= self.config.reid_interval and kps is not None:
+                emb = self.rec.engine.embed_aligned(img_bgr, kps)
+                m = self.rec.index.recognize(emb)
                 track.person_id = m.person_id if (m and m.matched) else None
                 track.similarity = m.similarity if m else 0.0
                 track.matched = bool(m and m.matched)
