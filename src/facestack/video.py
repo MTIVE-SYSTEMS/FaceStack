@@ -49,6 +49,9 @@ class Track:
     body_bbox: tuple[float, float, float, float] | None = None
     # Throttles body auto-enroll / body recognize, reusing reid_interval.
     frames_since_body_reid: int = 1_000_000
+    # Sticky once this body track's face was confidently matched: identity then
+    # persists through the turn (face hidden) instead of being re-queried and lost.
+    face_confirmed: bool = False
 
 
 @dataclass(slots=True)
@@ -222,28 +225,41 @@ class VideoRecognizer:
                 body_to_face[bj] = fi
 
         ran_body_reid = False
+
+        def _enrol(pid: str) -> None:
+            # Add the current-view embedding for pid, throttled + deduped. As a
+            # tracked person rotates this captures front -> side -> back views.
+            nonlocal ran_body_reid
+            if bt.frames_since_body_reid >= self.config.reid_interval:
+                if not self.rec._already_enrolled(pid, body.embedding, now):
+                    self.rec.body_index.add(pid, body.embedding, ts=now)
+                bt.frames_since_body_reid = 0
+                ran_body_reid = True
+
         for bj, body in enumerate(bodies):
             bt = self._body_tracks[body_track_for_idx[bj]]
-            if bj in body_to_face:
-                # Linked to a face track: auto-enroll iff that face is a
-                # confident match, throttled to one enroll per reid_interval.
-                ftrack = face_tracks[body_to_face[bj]]
-                if ftrack.matched and ftrack.person_id is not None:
-                    if bt.frames_since_body_reid >= self.config.reid_interval:
-                        # Skip near-duplicates so a stationary person doesn't
-                        # accumulate redundant embeddings every reid_interval.
-                        if not self.rec._already_enrolled(
-                            ftrack.person_id, body.embedding, now
-                        ):
-                            self.rec.body_index.add(ftrack.person_id, body.embedding, ts=now)
-                        bt.frames_since_body_reid = 0
-                        ran_body_reid = True
-                    bt.person_id = ftrack.person_id
-                    bt.matched = True
-                    bt.similarity = ftrack.similarity
-                    bt.source = "face"
+            ftrack = face_tracks[body_to_face[bj]] if bj in body_to_face else None
+            face_match = ftrack is not None and ftrack.matched and ftrack.person_id is not None
+
+            if face_match:
+                # Face visible & matched: (re)confirm identity, enrol the front view.
+                bt.person_id = ftrack.person_id
+                bt.matched = True
+                bt.similarity = ftrack.similarity
+                bt.source = "face"
+                bt.face_confirmed = True
+                _enrol(ftrack.person_id)
+            elif bt.face_confirmed and bt.person_id is not None:
+                # Same continuous track, face now hidden (turned away): KEEP the
+                # identity from when the face was visible — this is the whole point
+                # of body recognition — and keep enrolling the new (side/back) view
+                # so the gallery learns this person from behind too.
+                bt.matched = True
+                bt.source = "body"
+                _enrol(bt.person_id)
             else:
-                # No linked face: recognise via the body gallery, throttled.
+                # Never identified on this track (e.g. entered back-first): try the
+                # body gallery — works if they were seen face-first elsewhere/earlier.
                 if bt.frames_since_body_reid >= self.config.reid_interval:
                     m = self.rec.body_index.recognize(
                         body.embedding, now=now, ttl=self.config.body_ttl_seconds
