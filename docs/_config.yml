@@ -1,0 +1,5 @@
+# GitHub Pages (Jekyll, "Deploy from a branch" -> main / docs).
+# Renders the Markdown in docs/ into a documentation site for developers + agents.
+title: FaceStack
+description: Face + body recognition engine — integration docs for developers and AI agents.
+theme: jekyll-theme-cayman
