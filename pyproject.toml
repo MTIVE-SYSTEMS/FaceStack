@@ -9,7 +9,11 @@ description = "Fast, efficient and accurate face recognition engine (detection +
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 authors = [{ name = "MTIVE SYSTEMS" }]
-license = { text = "Proprietary" }
+license = { text = "AGPL-3.0-or-later" }
+classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Programming Language :: Python :: 3.12",
+]
 
 [project.optional-dependencies]
 # Thin HTTP client for consumer projects (client/facestack_client.py)

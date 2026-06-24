@@ -127,3 +127,10 @@ asyncio.run(run())
   owner). Don't hardcode your own threshold — trust `matched`, or read `similarity`.
 - Enrollment is in-memory until `POST /v1/index/save`; the service auto-loads the
   saved gallery on restart.
+
+## License & scope
+
+FaceStack code is AGPL-3.0-or-later (© MTIVE SYSTEMS). The bundled InsightFace
+`buffalo_l` models are **non-commercial research only** — do not use this service
+in a commercial product without resolving the model license. Intended scope as
+shipped: non-commercial / research.

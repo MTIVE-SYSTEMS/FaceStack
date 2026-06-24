@@ -178,3 +178,23 @@ same folder layout). The same script handles both.
 ```bash
 pytest          # gallery logic runs without models; engine tests need insightface
 ```
+
+## License
+
+**FaceStack code © MTIVE SYSTEMS — licensed under [AGPL-3.0-or-later](LICENSE).**
+
+AGPL is network copyleft: anyone who uses, modifies, or runs FaceStack as a
+service for others must make their corresponding source available under the same
+license. Copyright stays with MTIVE SYSTEMS, who may also grant separate
+commercial licenses.
+
+> **The face-recognition models are NOT covered by this license.** FaceStack uses
+> InsightFace `buffalo_l` (SCRFD + ArcFace). The InsightFace *library* is MIT, but
+> its *pretrained models* are licensed for **non-commercial research only** —
+> AGPL grants no commercial rights to them. Commercial use requires a separate
+> license from InsightFace (`recognition-oss-pack@insightface.ai`) or swapping in
+> a commercially-licensed model. FaceStack's intended scope is therefore
+> **non-commercial / research** as shipped.
+
+Other dependencies are permissive (onnxruntime MIT, hnswlib Apache-2.0, OpenCV
+Apache-2.0, FastAPI MIT, NumPy BSD).
