@@ -26,6 +26,7 @@ All `/v1/*` requests MUST send header `X-API-Key: <API_KEY>`.
 |---|---|---|---|
 | GET | `/healthz` | — | `{status, providers, on_gpu, gallery_size, people, body_enabled, body_on_gpu, body_gallery_size}` |
 | POST | `/v1/enroll` | `person_id` (str), `file` (image), `cropped` (bool, default false) | `{person_id, enrolled}` |
+| POST | `/v1/enroll/batch` | `person_id` (str), `files` (many images), `cropped` (bool) | `{person_id, images, enrolled, per_image}` |
 | POST | `/v1/recognize` | `file` (image), `cropped` (bool, default false) | `{faces: [...]}` (+ `persons`, `bodies` when body on) |
 | GET | `/v1/identities` | — | `{count, people: [str]}` |
 | DELETE | `/v1/identities/{person_id}` | — | `{ok, detail}` |
@@ -62,6 +63,8 @@ Use `cropped=false` (default) for full photos/frames.
 KEY=<API_KEY>; BASE=http://<host>:8011
 curl "$BASE/healthz"
 curl -H "X-API-Key: $KEY" -F person_id=ahmet -F file=@ahmet.jpg  "$BASE/v1/enroll"
+curl -H "X-API-Key: $KEY" -F person_id=ahmet \
+     -F files=@a1.jpg -F files=@a2.jpg -F files=@a3.jpg          "$BASE/v1/enroll/batch"
 curl -H "X-API-Key: $KEY" -F file=@group.jpg                     "$BASE/v1/recognize"
 curl -H "X-API-Key: $KEY" "$BASE/v1/identities"
 curl -H "X-API-Key: $KEY" -X DELETE "$BASE/v1/identities/ahmet"
@@ -120,8 +123,11 @@ asyncio.run(run())
 
 - **Recognise who's in a photo** → `POST /v1/recognize`; read `faces[].person_id`
   where `matched` is true.
-- **Add a new person** → `POST /v1/enroll` a few times with varied photos of them
-  (different angle/light), then `POST /v1/index/save` to persist.
+- **Add a new person** → `POST /v1/enroll/batch` with several varied photos
+  (different angles/lighting — far more reliable than one shot), then
+  `POST /v1/index/save` to persist. `per_image[]` shows which photos had a usable
+  face (0 = none found). Bulk-load a whole `dataset/<name>/*.jpg` tree with
+  `python scripts/enroll_dataset.py`.
 - **List / remove people** → `GET /v1/identities`, `DELETE /v1/identities/{id}`.
 - **Live camera** → `WS /v1/stream/recognize`, send frames, read per-frame faces.
 

@@ -42,6 +42,13 @@ class EnrollResponse(BaseModel):
     enrolled: int = Field(description="Number of faces added to the gallery")
 
 
+class BatchEnrollResponse(BaseModel):
+    person_id: str
+    images: int = Field(description="Number of images received")
+    enrolled: int = Field(description="Total faces added across all images")
+    per_image: list[int] = Field(description="Faces enrolled from each image, in order")
+
+
 class IdentitiesResponse(BaseModel):
     count: int
     people: list[str]

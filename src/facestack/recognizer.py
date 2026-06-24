@@ -99,6 +99,23 @@ class Recognizer:
         self.index.add(person_id, face.embedding)
         return True
 
+    def enroll_images(
+        self, person_id: str, images: list[np.ndarray], cropped: bool = False
+    ) -> list[int]:
+        """Enroll several photos of one person at once (varied angles/lighting).
+
+        A few embeddings per person make recognition far more robust than a single
+        shot. Returns the per-image face count (0 where no face was usable), so the
+        caller can report which photos contributed.
+        """
+        counts: list[int] = []
+        for img in images:
+            if cropped:
+                counts.append(1 if self.enroll_crop(person_id, img) else 0)
+            else:
+                counts.append(self.enroll_frame(person_id, img))
+        return counts
+
     # --- recognition ---
     def recognize_frame(self, img_bgr: np.ndarray) -> list[RecognizedFace]:
         """Locate every face in a frame and match each against saved faces."""

@@ -44,6 +44,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ..config import Config
 from ..recognizer import Recognizer
 from ..schemas import (
+    BatchEnrollResponse,
     BodyResult,
     EnrollResponse,
     FaceResult,
@@ -155,6 +156,25 @@ def create_app(config: Config | None = None) -> FastAPI:
         if count == 0:
             raise HTTPException(status_code=422, detail="No face could be enrolled")
         return EnrollResponse(person_id=person_id, enrolled=count)
+
+    @v1.post("/enroll/batch", response_model=BatchEnrollResponse)
+    async def enroll_batch(
+        person_id: str = Form(...),
+        files: list[UploadFile] = File(...),
+        cropped: bool = Form(False),
+    ) -> BatchEnrollResponse:
+        """Enroll several photos of one person in a single call.
+
+        A few varied shots (angles/lighting) recognise far more reliably than one.
+        """
+        images = [_decode(await f.read()) for f in files]
+        per_image = rec().enroll_images(person_id, images, cropped=cropped)
+        total = sum(per_image)
+        if total == 0:
+            raise HTTPException(status_code=422, detail="No face could be enrolled from any image")
+        return BatchEnrollResponse(
+            person_id=person_id, images=len(images), enrolled=total, per_image=per_image
+        )
 
     @v1.post("/recognize", response_model=RecognizeResponse)
     async def recognize(

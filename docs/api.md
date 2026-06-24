@@ -41,6 +41,19 @@ curl -H "X-API-Key: $KEY" -F person_id=ahmet -F file=@ahmet.jpg http://<host>:80
 # {"person_id":"ahmet","enrolled":1}
 ```
 
+### `POST /v1/enroll/batch`
+Enroll several photos of one person at once — a few varied angles/lighting
+recognise far more reliably than a single shot. Form: `person_id` (str),
+`files` (repeated), `cropped` (bool). `422` if no face is found in *any* image.
+```bash
+curl -H "X-API-Key: $KEY" -F person_id=ahmet \
+     -F files=@a1.jpg -F files=@a2.jpg -F files=@a3.jpg http://<host>:8011/v1/enroll/batch
+# {"person_id":"ahmet","images":3,"enrolled":4,"per_image":[2,1,1]}
+```
+`per_image[i]` is the face count from image `i` (0 = no usable face there).
+Bulk-load a `dataset/<name>/*.jpg` tree: `python scripts/enroll_dataset.py dataset
+--base-url http://<host>:8011 --api-key "$KEY"` (enrolls each folder, then saves).
+
 ### `POST /v1/recognize`
 Form: `file` (image), `cropped` (bool, default false).
 ```bash
@@ -122,6 +135,7 @@ from facestack_client import FaceStackClient
 
 fs = FaceStackClient("http://<host>:8011", api_key="proj-a-key")
 fs.enroll("ahmet", "ahmet.jpg")            # path, bytes, or file-like
+fs.enroll_batch("ahmet", ["a1.jpg", "a2.jpg", "a3.jpg"])   # several angles at once
 for face in fs.recognize("group.jpg"):
     print(face["person_id"], round(face["similarity"], 3), face["matched"])
 fs.identities(); fs.save()
@@ -132,7 +146,7 @@ use it without the engine's heavy deps.
 
 ## Typical flow
 
-1. `POST /v1/enroll` each person (a few varied shots).
+1. `POST /v1/enroll/batch` each person (a few varied shots — angles/lighting).
 2. `POST /v1/index/save` to persist.
 3. `POST /v1/recognize` (images) or `WS /v1/stream/recognize` (video) to identify.
 4. Tune `FACESTACK_MATCH_THRESHOLD` after [calibration](calibration.md).

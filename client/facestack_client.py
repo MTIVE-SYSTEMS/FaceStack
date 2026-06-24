@@ -68,6 +68,25 @@ class FaceStackClient:
                 f.close()
         return self._check(r)
 
+    def enroll_batch(
+        self, person_id: str, images: list[str | bytes | BinaryIO], cropped: bool = False
+    ) -> dict:
+        """Enroll several photos of one person in one call (varied angles help)."""
+        opened = [self._as_file(im) for im in images]
+        try:
+            r = requests.post(
+                self._url("/v1/enroll/batch"),
+                headers=self._headers,
+                data={"person_id": person_id, "cropped": str(cropped).lower()},
+                files=[("files", f) for f in opened],
+                timeout=self.timeout,
+            )
+        finally:
+            for f in opened:
+                if hasattr(f, "close"):
+                    f.close()
+        return self._check(r)
+
     def recognize(self, image: str | bytes | BinaryIO, cropped: bool = False) -> list[dict]:
         f = self._as_file(image)
         try:
