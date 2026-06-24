@@ -89,9 +89,8 @@ import cv2
 
 rec = Recognizer()
 
-# enroll saved faces
-rec.enroll_frame("alice", cv2.imread("alice1.jpg"))
-rec.enroll_frame("alice", cv2.imread("alice2.jpg"))
+# enroll saved faces — several varied shots per person recognise far better
+rec.enroll_images("alice", [cv2.imread(p) for p in ("alice1.jpg", "alice2.jpg", "alice3.jpg")])
 
 # recognise
 for face in rec.recognize_frame(cv2.imread("group_photo.jpg")):
@@ -110,6 +109,7 @@ uvicorn facestack.service.app:app --host 0.0.0.0 --port 8000
 |---|---|---|
 | GET | `/healthz` | liveness, provider, gallery size (no auth) |
 | POST | `/v1/enroll` | save a face (`person_id`, `file`, `cropped`) |
+| POST | `/v1/enroll/batch` | save several photos of one person (`person_id`, `files`, `cropped`) |
 | POST | `/v1/recognize` | recognise faces in an image (`file`, `cropped`) |
 | GET | `/v1/identities` | list enrolled people |
 | DELETE | `/v1/identities/{id}` | remove a person |
@@ -120,6 +120,8 @@ uvicorn facestack.service.app:app --host 0.0.0.0 --port 8000
 request then needs a matching `X-API-Key` header. Empty ⇒ open (dev only).
 **Client:** drop-in Python SDK at [`client/facestack_client.py`](client/facestack_client.py)
 (`requests`-only). See [docs/api.md](docs/api.md).
+**Bulk enroll:** `python scripts/enroll_dataset.py dataset` loads a
+`dataset/<person>/*.jpg` tree (one folder per person) via the API, then saves.
 
 ## Performance
 

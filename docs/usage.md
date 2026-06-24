@@ -14,10 +14,9 @@ from facestack import Recognizer
 
 rec = Recognizer()                       # loads buffalo_l (downloads on first run)
 
-# enroll saved faces — several varied shots per person is best
-rec.enroll_frame("ahmet", cv2.imread("ahmet1.jpg"))
-rec.enroll_frame("ahmet", cv2.imread("ahmet2.jpg"))
-rec.enroll_frame("aras",  cv2.imread("aras1.jpg"))
+# enroll saved faces — several varied shots per person recognise far better
+rec.enroll_images("ahmet", [cv2.imread(p) for p in ("ahmet1.jpg", "ahmet2.jpg", "ahmet3.jpg")])
+rec.enroll_frame("aras", cv2.imread("aras1.jpg"))   # single shot still works
 
 # recognise
 for face in rec.recognize_frame(cv2.imread("group.jpg")):
@@ -32,6 +31,8 @@ rec.save()                               # persist gallery to disk (config paths
 
 ### `Recognizer`
 - `enroll_frame(person_id, img_bgr) -> int` — enroll every face found; returns count.
+- `enroll_images(person_id, [img_bgr], cropped=False) -> list[int]` — enroll several
+  photos at once (varied angles → far more robust); returns the per-image face count.
 - `enroll_crop(person_id, img_bgr) -> bool` — enroll a single cropped face.
 - `recognize_frame(img_bgr) -> list[RecognizedFace]` — locate + match every face.
 - `recognize_crop(img_bgr) -> RecognizedFace | None` — match one cropped face.
@@ -79,6 +80,8 @@ while True:
 ## Enrollment best practices
 
 - **Several shots per person**, varied: angles, distance, lighting, glasses on/off.
+  Use `enroll_images()` (library), `POST /v1/enroll/batch` (service), or
+  `scripts/enroll_dataset.py` to bulk-load a `dataset/<name>/*.jpg` tree.
 - One face per enrollment image — for group photos, crop first, or expect every
   face to be enrolled under that `person_id`.
 - After collecting data, **calibrate the threshold** — see [calibration.md](calibration.md).
