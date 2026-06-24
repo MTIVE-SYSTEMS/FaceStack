@@ -11,6 +11,12 @@ liveness probes.
   DELETE /v1/identities/{person_id} - remove a person from the gallery
   POST /v1/index/save | /v1/index/load - persist / restore the gallery
   WS   /v1/stream/recognize         - per-frame recognition for live video
+
+When config.enable_body is set, /v1/recognize also returns unified `persons`
+(and `bodies`), the WS stream emits a `persons` array, /healthz reports body
+model status, and index save/load covers the body gallery too. With it off
+(the default) every endpoint behaves exactly as before. There is no manual
+body-enroll endpoint by design — bodies auto-enroll on a confident face match.
 """
 
 from __future__ import annotations
@@ -38,11 +44,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from ..config import Config
 from ..recognizer import Recognizer
 from ..schemas import (
+    BodyResult,
     EnrollResponse,
     FaceResult,
     HealthResponse,
     IdentitiesResponse,
     OkResponse,
+    PersonResult,
     RecognizeResponse,
 )
 from ..video import VideoRecognizer
@@ -78,6 +86,13 @@ async def lifespan(app: FastAPI):
         log.info("Warmup complete (gpu=%s)", rec.engine.on_gpu)
     except Exception as exc:  # noqa: BLE001
         log.warning("Warmup skipped: %s", exc)
+    if config.enable_body and rec.body_engine is not None:
+        try:
+            warm = np.zeros((config.det_size, config.det_size, 3), dtype=np.uint8)
+            rec.body_engine.detect_and_embed(warm)  # letterboxes to 640 internally
+            log.info("Body warmup complete (gpu=%s)", rec.body_engine.on_gpu)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Body warmup skipped: %s", exc)
 
     app.state.recognizer = rec
     auth = "on" if config.api_key_set else "OFF (open)"
@@ -112,12 +127,16 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.get("/healthz", response_model=HealthResponse)
     def healthz() -> HealthResponse:
         r = rec()
+        body_enabled = getattr(r, "_body_enabled", False)
         return HealthResponse(
             status="ok",
             providers=r.engine.active_providers,
             on_gpu=r.engine.on_gpu,
             gallery_size=len(r.index),
             people=len(r.index.people),
+            body_enabled=body_enabled,
+            body_on_gpu=(r.body_engine.on_gpu if body_enabled and r.body_engine else False),
+            body_gallery_size=(len(r.body_index) if body_enabled and r.body_index else 0),
         )
 
     v1 = APIRouter(prefix="/v1", dependencies=[Depends(require_api_key)])
@@ -143,23 +162,54 @@ def create_app(config: Config | None = None) -> FastAPI:
         cropped: bool = Form(False),
     ) -> RecognizeResponse:
         img = _decode(await file.read())
+
+        def _face_result(f) -> FaceResult:
+            return FaceResult(
+                bbox=list(f.bbox),
+                det_score=f.det_score,
+                person_id=f.person_id,
+                similarity=f.similarity,
+                matched=f.matched,
+            )
+
+        body_on = getattr(rec(), "_body_enabled", False)
+        # Cropped single-face requests have no scene/bodies — stay face-only.
+        if body_on and not cropped:
+            # Drive everything from recognize_scene (one face pass), derive faces
+            # from the persons' .face fields to avoid double-detecting faces.
+            persons = rec().recognize_scene(img)
+            faces = [_face_result(p.face) for p in persons if p.face is not None]
+            person_results = [
+                PersonResult(
+                    person_id=p.person_id,
+                    matched=p.matched,
+                    similarity=p.similarity,
+                    source=p.source,
+                    face=_face_result(p.face) if p.face else None,
+                    body=BodyResult(
+                        bbox=list(p.body.bbox),
+                        det_score=p.body.det_score,
+                        similarity=p.body.similarity,
+                        matched=p.body.matched,
+                    )
+                    if p.body
+                    else None,
+                )
+                for p in persons
+            ]
+            return RecognizeResponse(
+                faces=faces,
+                persons=person_results,
+                bodies=[pr.body for pr in person_results if pr.body is not None],
+            )
+
+        # Body-disabled (or cropped) path — byte-identical to the original.
         if cropped:
             r = rec().recognize_crop(img)
             faces = [r] if r is not None else []
         else:
             faces = rec().recognize_frame(img)
-        return RecognizeResponse(
-            faces=[
-                FaceResult(
-                    bbox=list(f.bbox),
-                    det_score=f.det_score,
-                    person_id=f.person_id,
-                    similarity=f.similarity,
-                    matched=f.matched,
-                )
-                for f in faces
-            ]
-        )
+        return RecognizeResponse(faces=[_face_result(f) for f in faces])
 
     @v1.get("/identities", response_model=IdentitiesResponse)
     def identities() -> IdentitiesResponse:
@@ -205,21 +255,53 @@ def create_app(config: Config | None = None) -> FastAPI:
                 if img is None:
                     await ws.send_json({"error": "bad frame"})
                     continue
-                tracked = video.process_frame(img)
-                await ws.send_json(
-                    {
-                        "faces": [
-                            {
-                                "track_id": t.track_id,
-                                "bbox": list(t.bbox),
-                                "person_id": t.person_id,
-                                "similarity": t.similarity,
-                                "matched": t.matched,
-                            }
-                            for t in tracked
-                        ]
-                    }
-                )
+                if config.enable_body:
+                    persons = video.process_frame_persons(img)
+                    await ws.send_json(
+                        {
+                            # `faces` stays present so existing WS clients keep
+                            # working; populated from the face-sourced persons.
+                            "faces": [
+                                {
+                                    "track_id": p.track_id,
+                                    "bbox": list(p.bbox),
+                                    "person_id": p.person_id,
+                                    "similarity": p.similarity,
+                                    "matched": p.matched,
+                                }
+                                for p in persons
+                                if p.source == "face"
+                            ],
+                            "persons": [
+                                {
+                                    "track_id": p.track_id,
+                                    "bbox": list(p.bbox),
+                                    "person_id": p.person_id,
+                                    "similarity": p.similarity,
+                                    "matched": p.matched,
+                                    "source": p.source,
+                                    "body_bbox": list(p.body_bbox) if p.body_bbox else None,
+                                }
+                                for p in persons
+                            ],
+                        }
+                    )
+                else:
+                    tracked = video.process_frame(img)
+                    await ws.send_json(
+                        {
+                            "faces": [
+                                {
+                                    "track_id": t.track_id,
+                                    "bbox": list(t.bbox),
+                                    "person_id": t.person_id,
+                                    "similarity": t.similarity,
+                                    "matched": t.matched,
+                                }
+                                for t in tracked
+                            ]
+                        }
+                    )
         except WebSocketDisconnect:
             log.info("Stream client disconnected")
 

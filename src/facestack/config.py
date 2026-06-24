@@ -35,6 +35,23 @@ class Config(BaseSettings):
     track_iou_threshold: float = 0.3
     track_max_age: int = 30  # frames a track survives without a detection
 
+    # --- Body recognition (opt-in; default OFF) ---
+    # When False, no body models load and the package behaves exactly as before.
+    # Body ReID is clothing/appearance based, so embeddings expire after a TTL.
+    enable_body: bool = False
+    body_detector_path: str = "~/.facestack/models/yolov8_person.onnx"
+    body_reid_path: str = "~/.facestack/models/osnet_reid.onnx"
+    body_det_size: int = 640  # YOLOv8 letterbox input is (body_det_size, body_det_size)
+    body_det_thresh: float = 0.5  # YOLOv8 person-class score threshold
+    body_nms_iou: float = 0.45  # NMS IoU for person boxes
+    body_match_threshold: float = 0.5  # OSNet cosine threshold for a body match
+    body_embedding_dim: int = 512  # OSNet output dim
+    body_reid_size: tuple[int, int] = (256, 128)  # OSNet input (H, W); cv2 wants (W, H)
+    body_ttl_seconds: float = 86400.0  # body embeddings expire after 1 day
+    body_index_path: str = "indexes/bodies.bin"
+    body_meta_path: str = "indexes/bodies.meta.json"
+    body_link_containment: float = 0.6  # min face-in-body containment to link
+
     # --- Service / access control ---
     # Comma-separated API keys. Empty = auth disabled (dev). When set, every /v1
     # request must send a matching `X-API-Key` header. Keep keys in .env, not code.

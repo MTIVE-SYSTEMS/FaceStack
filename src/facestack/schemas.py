@@ -13,8 +13,28 @@ class FaceResult(BaseModel):
     matched: bool
 
 
+class BodyResult(BaseModel):
+    bbox: list[float] = Field(description="[x1, y1, x2, y2] in pixels")
+    det_score: float
+    similarity: float
+    matched: bool
+
+
+class PersonResult(BaseModel):
+    person_id: str | None = None
+    matched: bool
+    similarity: float
+    source: str = Field(description="'face' or 'body'")
+    face: FaceResult | None = None
+    body: BodyResult | None = None
+
+
 class RecognizeResponse(BaseModel):
+    # `faces` stays required + unchanged for backward-compat; persons/bodies are
+    # only populated when body recognition is enabled.
     faces: list[FaceResult]
+    persons: list[PersonResult] | None = None
+    bodies: list[BodyResult] | None = None
 
 
 class EnrollResponse(BaseModel):
@@ -38,3 +58,7 @@ class HealthResponse(BaseModel):
     on_gpu: bool
     gallery_size: int
     people: int
+    # Body fields default so existing clients/tests stay valid when body is off.
+    body_enabled: bool = False
+    body_on_gpu: bool = False
+    body_gallery_size: int = 0
