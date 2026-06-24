@@ -80,3 +80,28 @@ the GPU server. Mount a volume for `~/.insightface` to cache the model download.
 | `FACESTACK_TRACK_MAX_AGE` | `30` | Frames a track survives without a detection |
 | `FACESTACK_INDEX_PATH` / `_META_PATH` | `indexes/faces.*` | Gallery persistence paths |
 | `FACESTACK_INDEX_CAPACITY` | `10000` | Initial gallery capacity (grows automatically) |
+| `FACESTACK_ENABLE_BODY` | `false` | Turn on body (person ReID) recognition (see below) |
+| `FACESTACK_BODY_MATCH_THRESHOLD` | `0.5` | Cosine cutoff for a body match (calibrate separately) |
+| `FACESTACK_BODY_TTL_SECONDS` | `86400` | Body embeddings expire after this (day-scoped ReID) |
+| `FACESTACK_BODY_DETECTOR_PATH` / `_REID_PATH` | `~/.facestack/models/*.onnx` | Body model paths |
+| `FACESTACK_BODY_INDEX_PATH` / `_META_PATH` | `indexes/bodies.*` | Body gallery persistence paths |
+
+## Body recognition (optional)
+
+Recognise a person from their body when the face is not visible. Off by default;
+appearance/clothing based, so **day-scoped** (not a durable cross-day identity).
+
+```bash
+# 1. Fetch the ONNX models (YOLOv8 person detector + OSNet ReID; no torch needed)
+LD_LIBRARY_PATH=$HOME/rocm-compat python scripts/fetch_body_models.py
+# 2. Enable it in the systemd unit and restart
+#    add `Environment=FACESTACK_ENABLE_BODY=1` to ~/.config/systemd/user/facestack.service
+systemctl --user daemon-reload && systemctl --user restart facestack
+# 3. Verify — expect body_enabled:true, body_on_gpu:true
+curl -s http://127.0.0.1:8011/healthz
+```
+
+`deploy/facestack.service` ships the env line commented out. The body gallery is
+auto-populated (a person seen face-first becomes body-recognisable) and persists
+via `/v1/index/save`. See [api.md](api.md#body-recognition-person-reid) for the
+response shape.

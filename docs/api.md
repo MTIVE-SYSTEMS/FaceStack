@@ -28,8 +28,10 @@ curl -H "X-API-Key: proj-a-key" ...
 ### `GET /healthz`  (no auth)
 ```json
 { "status": "ok", "providers": ["ROCMExecutionProvider","CPUExecutionProvider"],
-  "on_gpu": true, "gallery_size": 12, "people": 3 }
+  "on_gpu": true, "gallery_size": 12, "people": 3,
+  "body_enabled": false, "body_on_gpu": false, "body_gallery_size": 0 }
 ```
+`body_*` fields reflect the optional body-recognition extension (see below).
 
 ### `POST /v1/enroll`
 `multipart/form-data`: `person_id` (str), `file` (image), `cropped` (bool,
@@ -52,6 +54,9 @@ curl -H "X-API-Key: $KEY" -F file=@group.jpg http://<host>:8011/v1/recognize
 ```
 `person_id` is `null` / `matched` false when nothing clears the threshold.
 
+With body recognition enabled, the response also carries `persons` (unified
+face+body identities) and `bodies` — see [Body recognition](#body-recognition-person-reid).
+
 ### `GET /v1/identities`
 `{ "count": 3, "people": ["ahmet","aras","yigithan"] }`
 
@@ -68,6 +73,45 @@ Auth: `X-API-Key` header or `?api_key=` query param.
 ```json
 { "faces": [ { "track_id":4, "bbox":[...], "person_id":"ahmet", "similarity":0.69, "matched":true } ] }
 ```
+With body on, each message also carries a `persons` array (adds body-only tracks
+and a `body_bbox` per face track) — see below.
+
+## Body recognition (person ReID)
+
+Opt-in extension: set `FACESTACK_ENABLE_BODY=1` and fetch the models with
+`python scripts/fetch_body_models.py` (YOLOv8 person detector + OSNet ReID, both
+ONNX, no torch). Off by default — when off, the API is exactly as above.
+
+When on, FaceStack also detects bodies and identifies a person from their body
+when the face is not visible. **There is no body-enroll endpoint:** when a body's
+face is recognised confidently, that body is auto-enrolled under the same
+`person_id`; later, a faceless body is matched against that body gallery.
+
+Body ReID is **appearance/clothing based and day-scoped** — embeddings expire
+after `FACESTACK_BODY_TTL_SECONDS` (default 86400) and degrade across outfits/days.
+Tune `FACESTACK_BODY_MATCH_THRESHOLD` (default 0.5) separately from the face one.
+`POST /v1/index/save|load` persist the body gallery alongside the face gallery.
+
+`POST /v1/recognize` then adds two arrays to the response:
+
+```json
+{ "faces": [ /* unchanged */ ],
+  "persons": [
+    { "person_id":"ahmet", "matched":true, "similarity":0.71, "source":"face",
+      "face":{ "bbox":[...],"det_score":0.92,"person_id":"ahmet","similarity":0.71,"matched":true },
+      "body":{ "bbox":[...],"det_score":0.86,"similarity":0.71,"matched":true } },
+    { "person_id":"aras", "matched":true, "similarity":0.58, "source":"body",
+      "face":null, "body":{ "bbox":[...],"det_score":0.84,"similarity":0.58,"matched":true } }
+  ],
+  "bodies": [ /* every detected body: {bbox,det_score,similarity,matched} */ ] }
+```
+
+`source` is `"face"` (identity from the face; `body` attached if linked) or
+`"body"` (no usable face; identified via the body gallery). `BodyResult` has no
+`person_id` — read it from the enclosing `persons[]` entry.
+
+`WS /v1/stream/recognize` adds a `persons` array per frame (with `source` and
+`body_bbox`); `faces` stays present for existing clients.
 
 ## Python client SDK
 
