@@ -7,7 +7,7 @@ bash scripts/serve.sh                 # uses LD_LIBRARY_PATH + FACESTACK_* env
 # or: uvicorn facestack.service.app:app --host 0.0.0.0 --port 8000
 ```
 
-On motis it runs as a systemd service on port **8011** (see [deployment.md](deployment.md)).
+On the GPU server it runs as a systemd service on port **8011** (see [deployment.md](deployment.md)).
 Interactive docs: `/docs` (Swagger UI). All functional endpoints are under **`/v1`**.
 
 ## Authentication
@@ -16,7 +16,7 @@ Set one or more keys via `FACESTACK_API_KEYS` (comma-separated, keep them in
 `.env`). Every `/v1` request must then send a matching `X-API-Key` header:
 
 ```bash
-export FACESTACK_API_KEYS="proj-a-key,proj-b-key"   # in motis ~/FaceStack/.env
+export FACESTACK_API_KEYS="proj-a-key,proj-b-key"   # in ~/FaceStack/.env on the server
 curl -H "X-API-Key: proj-a-key" ...
 ```
 
@@ -35,14 +35,14 @@ curl -H "X-API-Key: proj-a-key" ...
 `multipart/form-data`: `person_id` (str), `file` (image), `cropped` (bool,
 default false — true if `file` is already a cropped face). `422` if no face found.
 ```bash
-curl -H "X-API-Key: $KEY" -F person_id=ahmet -F file=@ahmet.jpg http://motis:8011/v1/enroll
+curl -H "X-API-Key: $KEY" -F person_id=ahmet -F file=@ahmet.jpg http://<host>:8011/v1/enroll
 # {"person_id":"ahmet","enrolled":1}
 ```
 
 ### `POST /v1/recognize`
 Form: `file` (image), `cropped` (bool, default false).
 ```bash
-curl -H "X-API-Key: $KEY" -F file=@group.jpg http://motis:8011/v1/recognize
+curl -H "X-API-Key: $KEY" -F file=@group.jpg http://<host>:8011/v1/recognize
 ```
 ```json
 { "faces": [
@@ -76,7 +76,7 @@ Drop `client/facestack_client.py` into your project (`pip install requests`):
 ```python
 from facestack_client import FaceStackClient
 
-fs = FaceStackClient("http://motis:8011", api_key="proj-a-key")
+fs = FaceStackClient("http://<host>:8011", api_key="proj-a-key")
 fs.enroll("ahmet", "ahmet.jpg")            # path, bytes, or file-like
 for face in fs.recognize("group.jpg"):
     print(face["person_id"], round(face["similarity"], 3), face["matched"])

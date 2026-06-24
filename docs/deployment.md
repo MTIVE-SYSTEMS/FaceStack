@@ -12,12 +12,12 @@ python scripts/check_env.py          # CPUExecutionProvider expected
 
 > Python 3.10–3.12 only (the ML stack has no 3.13/3.14 wheels yet).
 
-## motis (AMD RX 7900 XT, ROCm 7.2.4) — verified
+## GPU server (AMD RX 7900 XT, ROCm 7.2.4) — verified
 
 After the base install above, enable the GPU:
 
 ```bash
-bash scripts/setup_rocm_motis.sh                          # ROCm-EP wheel + compat symlink
+bash scripts/setup_rocm.sh                          # ROCm-EP wheel + compat symlink
 LD_LIBRARY_PATH=$HOME/rocm-compat python scripts/check_env.py   # ROCMExecutionProvider expected
 ```
 
@@ -32,7 +32,7 @@ This cost real debugging time — documented so nobody repeats it:
 2. **No plain ROCm-EP wheel ships for 7.2.x.** The ROCm-EP wheel built for **7.0**
    (`onnxruntime_rocm-1.22.1`, from `repo.radeon.com/.../rocm-rel-7.0/`) is
    ABI-compatible with 7.2.4 — except it needs `librocm_smi64.so.7` while 7.2.4
-   ships `.so.1`. `setup_rocm_motis.sh` symlinks it (rocm_smi is device
+   ships `.so.1`. `setup_rocm.sh` symlinks it (rocm_smi is device
    introspection only, not compute).
 3. **The PyPI `onnxruntime-rocm` (ROCm 6) silently falls back to CPU** here
    (`libhipblas.so.2` missing) — avoid it. `on_gpu` / `/healthz` expose any such
@@ -51,7 +51,7 @@ systemctl --user enable --now facestack       # autostart on boot
 sudo loginctl enable-linger aras              # survive logout/reboot (one-time)
 ```
 
-Runs `uvicorn` on **port 8011** (8000 is taken on motis) with `LD_LIBRARY_PATH`
+Runs `uvicorn` on **port 8011** (8000 is taken on the GPU server) with `LD_LIBRARY_PATH`
 baked in and `Restart=always`.
 
 ```bash
@@ -64,7 +64,7 @@ journalctl --user -u facestack -f
 
 `docker/Dockerfile.rocm` builds a reproducible GPU image (ROCm 7.2 base +
 `onnxruntime-rocm==1.22.2.post1`). The native venv above is the primary path on
-motis. Mount a volume for `~/.insightface` to cache the model download.
+the GPU server. Mount a volume for `~/.insightface` to cache the model download.
 
 ## Configuration (`FACESTACK_*` env vars)
 

@@ -7,8 +7,8 @@ then ask "who is this?" for an image or video frame.
 ## Connection
 
 ```
-BASE_URL = http://motis:8011        # or the motis host IP
-API_KEY  = <ask the FaceStack owner; lives in motis ~/FaceStack/.env>
+BASE_URL = http://<host>:8011        # the GPU server's host/IP
+API_KEY  = <ask the FaceStack owner; lives in ~/FaceStack/.env on the server>
 ```
 
 All `/v1/*` requests MUST send header `X-API-Key: <API_KEY>`.
@@ -53,7 +53,7 @@ Use `cropped=false` (default) for full photos/frames.
 ## curl
 
 ```bash
-KEY=<API_KEY>; BASE=http://motis:8011
+KEY=<API_KEY>; BASE=http://<host>:8011
 curl "$BASE/healthz"
 curl -H "X-API-Key: $KEY" -F person_id=ahmet -F file=@ahmet.jpg  "$BASE/v1/enroll"
 curl -H "X-API-Key: $KEY" -F file=@group.jpg                     "$BASE/v1/recognize"
@@ -66,7 +66,7 @@ curl -H "X-API-Key: $KEY" -X DELETE "$BASE/v1/identities/ahmet"
 ```python
 import requests
 
-BASE = "http://motis:8011"
+BASE = "http://<host>:8011"
 HEAD = {"X-API-Key": "<API_KEY>"}
 
 def enroll(person_id, path):
@@ -96,7 +96,7 @@ import asyncio, cv2, json, websockets
 
 async def run():
     async with websockets.connect(
-        "ws://motis:8011/v1/stream/recognize",
+        "ws://<host>:8011/v1/stream/recognize",
         additional_headers={"X-API-Key": "<API_KEY>"},   # or ?api_key=<key> in the URL
     ) as ws:
         cap = cv2.VideoCapture("rtsp://...")              # or 0 for a webcam

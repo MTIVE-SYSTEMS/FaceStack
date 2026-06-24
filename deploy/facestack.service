@@ -1,6 +1,6 @@
 # FaceStack systemd unit (user service — no root needed).
 #
-# Install on motis:
+# Install on the GPU server:
 #   mkdir -p ~/.config/systemd/user
 #   cp deploy/facestack.service ~/.config/systemd/user/
 #   systemctl --user daemon-reload
@@ -18,7 +18,7 @@ Wants=network-online.target
 
 [Service]
 WorkingDirectory=%h/FaceStack
-# ROCm compat shim so ROCMExecutionProvider loads (see scripts/setup_rocm_motis.sh)
+# ROCm compat shim so ROCMExecutionProvider loads (see scripts/setup_rocm.sh)
 Environment=LD_LIBRARY_PATH=%h/rocm-compat
 ExecStart=%h/FaceStack/.venv/bin/uvicorn facestack.service.app:app --host 0.0.0.0 --port 8011
 Restart=always

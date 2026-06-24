@@ -1,6 +1,6 @@
 """ONNX Runtime execution-provider selection.
 
-The same code runs on the AMD GPU (motis, ROCm) and on a CPU dev box: we probe
+The same code runs on the AMD GPU (the GPU server, ROCm) and on a CPU dev box: we probe
 the providers ONNX Runtime actually built with and pick the best available,
 always keeping CPU as a fallback.
 """
@@ -11,9 +11,9 @@ import logging
 
 log = logging.getLogger("facestack.runtime")
 
-# Preference order, best first. ROCm is the target on motis (RX 7900 XT / RDNA3).
+# Preference order, best first. ROCm is the target on the GPU server (RX 7900 XT / RDNA3).
 #
-# MIGraphX is deliberately NOT in the default list: on motis (ROCm 7.2.4) it is
+# MIGraphX is deliberately NOT in the default list: on the GPU server (ROCm 7.2.4) it is
 # unusable both ways we tried it — AMD's rocm-rel-7.2.4 migraphx wheel produces
 # numerically wrong SCRFD output (thousands of phantom detections), and the PyPI
 # onnxruntime-rocm wheel ships a MIGraphX provider lib linked against ROCm 6

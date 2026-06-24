@@ -1,4 +1,4 @@
-"""Environment doctor — run on motis to confirm the AMD GPU path is live.
+"""Environment doctor — run on the GPU server to confirm the AMD GPU path is live.
 
     python scripts/check_env.py
 """
@@ -16,7 +16,7 @@ def main() -> int:
     except ImportError:
         print("ERROR: onnxruntime not installed.")
         print("  dev/CPU : pip install onnxruntime")
-        print("  motis   : pip install onnxruntime-rocm")
+        print("  the GPU server   : pip install onnxruntime-rocm")
         return 1
 
     print("onnxruntime:", ort.__version__)
@@ -28,7 +28,7 @@ def main() -> int:
         print(f"GPU acceleration available via: {gpu[0]}")
     else:
         print("No GPU provider built into this onnxruntime — will run on CPU.")
-        print("On motis (AMD RX 7900 XT) install onnxruntime-rocm to enable ROCMExecutionProvider.")
+        print("On the GPU server (AMD RX 7900 XT) install onnxruntime-rocm to enable ROCMExecutionProvider.")
 
     for mod in ("numpy", "cv2", "hnswlib", "insightface", "fastapi"):
         try:

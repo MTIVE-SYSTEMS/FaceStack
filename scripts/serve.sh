@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch the FaceStack service. On motis this exports the ROCm compat lib path
+# Launch the FaceStack service. On the GPU server this exports the ROCm compat lib path
 # so the GPU (ROCMExecutionProvider) actually loads instead of silently falling
 # back to CPU. Harmless on a CPU-only box (the dir just won't contain anything).
 set -euo pipefail

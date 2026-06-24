@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot ROCm GPU setup for motis (RX 7900 XT, ROCm 7.2.4).
+# One-shot ROCm GPU setup for the GPU server (RX 7900 XT, ROCm 7.2.4).
 #
 # Why this is needed: AMD ships no plain ROCm-EP onnxruntime wheel for 7.2.x
 # (only MIGraphX, which mis-computes SCRFD). The ROCm-EP wheel built for ROCm

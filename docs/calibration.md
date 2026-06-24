@@ -57,7 +57,7 @@ Apply via `FACESTACK_MATCH_THRESHOLD=0.xx` (env / `.env`).
 
 ## What a clean result looks like
 
-From the 3-person motis calibration (after removing one bad 2-face photo):
+From the 3-person calibration (after removing one bad 2-face photo):
 
 ```
 same-person      : mean 0.690  min 0.492  max 0.961

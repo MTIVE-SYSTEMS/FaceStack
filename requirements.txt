@@ -18,6 +18,6 @@ python-multipart>=0.0.9
 
 # --- ONNX Runtime ---
 # DEV (this machine / CPU): onnxruntime
-# DEPLOY (motis / AMD GPU): pip install onnxruntime-rocm  (see README — ROCm section)
+# DEPLOY (the GPU server / AMD GPU): pip install onnxruntime-rocm  (see README — ROCm section)
 # Keep ONLY ONE of the two installed at a time.
 onnxruntime>=1.18

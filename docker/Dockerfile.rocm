@@ -1,5 +1,5 @@
-# FaceStack on AMD ROCm (motis: RX 7900 XT / RDNA3 / gfx1100, ROCm 7.2.4)
-# NOTE: motis is provisioned with a native venv (see README) — this image is a
+# FaceStack on AMD ROCm (the GPU server: RX 7900 XT / RDNA3 / gfx1100, ROCm 7.2.4)
+# NOTE: the GPU server is provisioned with a native venv (see README) — this image is a
 # reproducible alternative. Base tag should match the host ROCm major version.
 FROM rocm/dev-ubuntu-22.04:7.2-complete
 

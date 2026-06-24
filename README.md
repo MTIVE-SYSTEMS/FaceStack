@@ -52,13 +52,13 @@ pip install -e .
 python scripts/check_env.py
 ```
 
-## Deploy on  (AMD GPU / ROCm) — verified
+## Deploy on a GPU server (AMD GPU / ROCm) — verified
 
-``: RX 7900 XT (RDNA3, `gfx1100`), **ROCm 7.2.4**. After the base install above
+Target: RX 7900 XT (RDNA3, `gfx1100`), **ROCm 7.2.4**. After the base install above
 (which puts CPU `onnxruntime` in the venv), enable the GPU:
 
 ```bash
-bash scripts/setup_rocm_.sh                       # ROCm-EP wheel + compat symlink
+bash scripts/setup_rocm.sh                        # ROCm-EP wheel + compat symlink
 LD_LIBRARY_PATH=$HOME/rocm-compat python scripts/check_env.py   # expect ROCMExecutionProvider
 bash scripts/serve.sh                                  # serves with LD_LIBRARY_PATH set
 ```
@@ -123,7 +123,7 @@ request then needs a matching `X-API-Key` header. Empty ⇒ open (dev only).
 
 ## Performance
 
-Measured on  (RX 7900 XT, ROCm 7.2.4, ROCMExecutionProvider), warmed up,
+Measured on the GPU server (RX 7900 XT, ROCm 7.2.4, ROCMExecutionProvider), warmed up,
 6-face frame:
 
 | pack / det_size | detect-only | detect+embed all (naïve) | **video (steady)** |

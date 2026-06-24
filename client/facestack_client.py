@@ -4,7 +4,7 @@ Depends only on `requests` (no insightface/onnxruntime). Talks to the /v1 API.
 
     from facestack_client import FaceStackClient
 
-    fs = FaceStackClient("http://motis:8011", api_key="...")
+    fs = FaceStackClient("http://<host>:8011", api_key="...")
     fs.enroll("ahmet", "ahmet.jpg")
     for face in fs.recognize("group.jpg"):
         print(face["person_id"], face["similarity"], face["matched"])
