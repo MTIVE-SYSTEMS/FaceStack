@@ -21,11 +21,14 @@ from pathlib import Path
 
 from facestack.config import Config
 
-# Pre-exported, public ONNX mirrors matching the I/O contract BodyEngine expects:
-#   detector: input 1x3x640x640, output 1x84x8400 (YOLOv8 nano, COCO class 0 = person)
-#   reid    : input 1x3x256x128, output 1x512     (OSNet, 512-d feature)
-# Pin to a commit hash instead of `main` once you record one for reproducibility.
-_DET_URL = "https://huggingface.co/Xenova/yolov8n/resolve/main/onnx/model.onnx"
+# Pre-exported, public (non-gated) ONNX mirrors matching the I/O contract
+# BodyEngine expects:
+#   detector: input 1x3x640x640, output 1x84x8400 (YOLOv8n, COCO; class 0 = person)
+#   reid    : input Nx3x256x128, output Nx512     (OSNet x0_25 MSMT17, 512-d)
+# NOTE: this OSNet export fixes batch N=16; BodyEngine handles that by tiling a
+# single crop and keeping row 0. Pin to a commit hash instead of `main` for
+# full reproducibility once you record one.
+_DET_URL = "https://huggingface.co/webml/yolov8n/resolve/main/onnx/yolov8n.onnx"
 _REID_URL = (
     "https://huggingface.co/anriha/osnet_x0_25_msmt17/resolve/main/"
     "osnet_x0_25_msmt17.onnx?download=true"

@@ -252,6 +252,13 @@ class BodyEngine:
         self._reid_input = self.reid_session.get_inputs()[0].name
         self._reid_output = self.reid_session.get_outputs()[0].name
 
+        # Some public OSNet exports fix the batch dimension (e.g. 16) instead of
+        # leaving it dynamic. We feed one crop at a time, so detect a fixed batch
+        # here and tile the single crop up to it in embed_body, slicing row 0
+        # back out. A dynamic dim (str/None) or 1 means no tiling.
+        reid_batch = self.reid_session.get_inputs()[0].shape[0]
+        self._reid_batch = reid_batch if isinstance(reid_batch, int) and reid_batch > 1 else 1
+
         # Truth, not intent: a requested GPU provider can silently fail to load
         # (missing/ABI-mismatched ROCm libs) and ORT falls back to CPU per-node.
         # Read back what the sessions actually applied. Both use the same
@@ -323,8 +330,13 @@ class BodyEngine:
         if crop.size == 0:
             raise ValueError(f"empty body crop for bbox {bbox}")
         blob = preprocess_osnet(crop, self.config.body_reid_size)
+        if self._reid_batch > 1:  # fixed-batch export: tile, embed, keep row 0
+            blob = np.tile(blob, (self._reid_batch, 1, 1, 1))
         feat = self.reid_session.run([self._reid_output], {self._reid_input: blob})[0]
-        return _l2norm(np.asarray(feat, dtype=np.float32).reshape(-1))
+        feat = np.asarray(feat, dtype=np.float32)
+        if feat.ndim == 2:  # (batch, 512) -> first row is our single crop
+            feat = feat[0]
+        return _l2norm(feat.reshape(-1))
 
     # --- full frame: locate then embed (stills / convenience) ---
     def detect_and_embed(self, img_bgr: np.ndarray) -> list[DetectedBody]:
