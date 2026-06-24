@@ -10,7 +10,7 @@ Reusable as a Python library or as a REST/WebSocket service. Targets AMD ROCm
 
 ## Documentation
 
-📖 **Docs site (developers & agents):** <https://mtive-systems.github.io/FaceStack/>
+📖 **Docs site (developers & agents):** <https://docs.mtive.tech/>
 — the full integration spec, rendered. Agents can also fetch the raw Markdown
 directly: `https://raw.githubusercontent.com/MTIVE-SYSTEMS/FaceStack/main/docs/integration.md`,
 or a running server's `GET /openapi.json` (Swagger at `/docs`).
