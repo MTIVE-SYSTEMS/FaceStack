@@ -115,6 +115,7 @@ uvicorn facestack.service.app:app --host 0.0.0.0 --port 8000
 | GET | `/healthz` | liveness, provider, gallery size (no auth) |
 | POST | `/v1/enroll` | save a face (`person_id`, `file`, `cropped`) |
 | POST | `/v1/enroll/batch` | save several photos of one person (`person_id`, `files`, `cropped`) |
+| POST | `/v1/enroll/body` · `/v1/enroll/body/batch` | permanently enrol body photos (multi-angle; body mode) |
 | POST | `/v1/recognize` | recognise faces in an image (`file`, `cropped`) |
 | GET | `/v1/identities` | list enrolled people |
 | DELETE | `/v1/identities/{id}` | remove a person |

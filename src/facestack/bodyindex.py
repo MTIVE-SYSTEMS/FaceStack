@@ -29,8 +29,11 @@ class BodyIndex:
     """Cosine gallery over L2-normalized body embeddings, with per-entry TTL.
 
     Same hnswlib mechanics as FaceIndex plus a parallel label->timestamp map.
-    A single person_id may have many embeddings (auto-enrolled across frames /
-    cameras); search returns the best *unexpired* embedding per person.
+    A single person_id may have many embeddings; search returns the best valid
+    embedding per person. Two enrollment kinds coexist under one person_id:
+      * day-scoped (default): auto-enrolled from video; expires after `ttl`.
+      * permanent: explicitly enrolled (like the face gallery); never expires,
+        never purged — for deliberate multi-angle (front/side/back) enrollment.
     """
 
     def __init__(self, dim: int = 512, capacity: int = 10_000, threshold: float = 0.50):
@@ -45,11 +48,15 @@ class BodyIndex:
         self._next_label = 0
         self._label_to_person: dict[int, str] = {}
         self._person_labels: dict[str, list[int]] = {}
-        self._label_to_ts: dict[int, float] = {}  # NEW: enrollment time per label
+        self._label_to_ts: dict[int, float] = {}  # enrollment time per label
+        self._permanent: set[int] = set()  # labels exempt from TTL expiry/purge
 
     # --- enrollment ---
-    def add(self, person_id: str, embedding: np.ndarray, ts: float) -> int:
-        """Add one body embedding for person_id, stamped at unix time `ts`."""
+    def add(self, person_id: str, embedding: np.ndarray, ts: float, permanent: bool = False) -> int:
+        """Add one body embedding for person_id, stamped at unix time `ts`.
+
+        permanent=True marks it exempt from TTL (explicit enrollment, like faces).
+        """
         vec = self._prep(embedding)
         with self._lock:
             label = self._next_label
@@ -60,6 +67,8 @@ class BodyIndex:
             self._label_to_person[label] = person_id
             self._person_labels.setdefault(person_id, []).append(label)
             self._label_to_ts[label] = float(ts)
+            if permanent:
+                self._permanent.add(label)
             return label
 
     # --- recognition ---
@@ -93,7 +102,9 @@ class BodyIndex:
                 if person is None or person in seen:
                     continue
                 ts = label_to_ts.get(label)
-                if ts is None or ts < cutoff:  # expired or orphaned -> skip
+                if ts is None:  # orphaned -> skip
+                    continue
+                if label not in self._permanent and ts < cutoff:  # expired -> skip
                     continue
                 seen.add(person)
                 sim = float(1.0 - dist)  # hnswlib cosine distance = 1 - cos_sim
@@ -112,7 +123,11 @@ class BodyIndex:
         """mark_deleted every embedding older than now-ttl. Returns count purged."""
         cutoff = now - ttl
         with self._lock:
-            expired = [lbl for lbl, ts in self._label_to_ts.items() if ts < cutoff]
+            expired = [
+                lbl
+                for lbl, ts in self._label_to_ts.items()
+                if lbl not in self._permanent and ts < cutoff
+            ]
             for label in expired:
                 try:
                     self._index.mark_deleted(label)
@@ -120,6 +135,7 @@ class BodyIndex:
                     pass  # already deleted
                 person = self._label_to_person.pop(label, None)
                 self._label_to_ts.pop(label, None)
+                self._permanent.discard(label)
                 if person is not None:
                     labels = self._person_labels.get(person)
                     if labels is not None:
@@ -143,6 +159,7 @@ class BodyIndex:
                     pass
                 self._label_to_person.pop(label, None)
                 self._label_to_ts.pop(label, None)
+                self._permanent.discard(label)
             return len(labels)
 
     @property
@@ -168,6 +185,7 @@ class BodyIndex:
                 "max_elements": self._index.get_max_elements(),
                 "label_to_person": self._label_to_person,
                 "label_to_ts": self._label_to_ts,
+                "permanent": sorted(self._permanent),
             }
             with open(meta_path, "w") as f:
                 json.dump(meta, f)
@@ -189,6 +207,7 @@ class BodyIndex:
         self._next_label = meta["next_label"]
         self._label_to_person = {int(k): v for k, v in meta["label_to_person"].items()}
         self._label_to_ts = {int(k): float(v) for k, v in meta["label_to_ts"].items()}
+        self._permanent = {int(x) for x in meta.get("permanent", [])}  # back-compat: absent => none
         self._person_labels = {}
         for label, person in self._label_to_person.items():
             self._person_labels.setdefault(person, []).append(label)

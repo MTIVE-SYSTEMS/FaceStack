@@ -34,6 +34,9 @@ rec.save()                               # persist gallery to disk (config paths
 - `enroll_images(person_id, [img_bgr], cropped=False) -> list[int]` — enroll several
   photos at once (varied angles → far more robust); returns the per-image face count.
 - `enroll_crop(person_id, img_bgr) -> bool` — enroll a single cropped face.
+- `enroll_body_frame / enroll_body_crop / enroll_body_images` — permanently enrol
+  bodies (multi-angle, never expire), parallel to the face methods. Requires
+  `FACESTACK_ENABLE_BODY=1`; see [api.md](api.md#body-recognition-person-reid).
 - `recognize_frame(img_bgr) -> list[RecognizedFace]` — locate + match every face.
 - `recognize_crop(img_bgr) -> RecognizedFace | None` — match one cropped face.
 - `save()` / `load()` — persist/restore the gallery (uses `Config` paths).

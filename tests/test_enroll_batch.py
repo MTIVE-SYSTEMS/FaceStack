@@ -21,10 +21,12 @@ def _png(seed: int) -> bytes:
     return cv2.imencode(".png", img)[1].tobytes()
 
 
-def _client(per_image):
+def _client(per_image, body_enabled=False):
     app = create_app(Config(api_keys=""))
     app.state.recognizer = SimpleNamespace(
         enroll_images=lambda person_id, images, cropped=False: per_image[: len(images)],
+        enroll_body_images=lambda person_id, images, cropped=False: per_image[: len(images)],
+        _body_enabled=body_enabled,
     )
     return TestClient(app)
 
@@ -46,3 +48,18 @@ def test_batch_enroll_422_when_no_face_anywhere():
     files = [("files", (f"b{i}.png", _png(i + 9), "image/png")) for i in range(2)]
     r = c.post("/v1/enroll/batch", data={"person_id": "nobody"}, files=files)
     assert r.status_code == 422
+
+
+def test_body_batch_enroll_when_enabled():
+    c = _client([1, 1, 1], body_enabled=True)
+    files = [("files", (f"a{i}.png", _png(i), "image/png")) for i in range(3)]
+    r = c.post("/v1/enroll/body/batch", data={"person_id": "aras"}, files=files)
+    assert r.status_code == 200
+    assert r.json()["enrolled"] == 3
+
+
+def test_body_enroll_503_when_disabled():
+    c = _client([1], body_enabled=False)
+    files = [("files", ("a.png", _png(1), "image/png"))]
+    r = c.post("/v1/enroll/body/batch", data={"person_id": "aras"}, files=files)
+    assert r.status_code == 503

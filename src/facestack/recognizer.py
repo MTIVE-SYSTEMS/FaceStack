@@ -116,6 +116,51 @@ class Recognizer:
                 counts.append(self.enroll_frame(person_id, img))
         return counts
 
+    # --- body enrollment (permanent, mirrors face enrollment) ---
+    def _require_body(self) -> None:
+        if not self._body_enabled or self.body_engine is None or self.body_index is None:
+            raise RuntimeError("body recognition is disabled (set FACESTACK_ENABLE_BODY=1)")
+
+    def enroll_body_frame(self, person_id: str, img_bgr: np.ndarray) -> int:
+        """Permanently enroll every body found in a full image. Returns count.
+
+        Unlike auto-enrolled (day-scoped) bodies, these never expire — enroll a
+        few angles (front/side/back) per person, just like multi-shot faces.
+        """
+        self._require_body()
+        import time
+
+        now = time.time()
+        bodies = self.body_engine.detect_and_embed(img_bgr)
+        for b in bodies:
+            self.body_index.add(person_id, b.embedding, ts=now, permanent=True)
+        return len(bodies)
+
+    def enroll_body_crop(self, person_id: str, img_bgr: np.ndarray) -> bool:
+        """Permanently enroll one already-cropped body. False if it can't embed."""
+        self._require_body()
+        import time
+
+        if img_bgr is None or img_bgr.size == 0:
+            return False
+        h, w = img_bgr.shape[:2]
+        emb = self.body_engine.embed_body(img_bgr, (0.0, 0.0, float(w), float(h)))
+        self.body_index.add(person_id, emb, ts=time.time(), permanent=True)
+        return True
+
+    def enroll_body_images(
+        self, person_id: str, images: list[np.ndarray], cropped: bool = False
+    ) -> list[int]:
+        """Permanently enroll several body photos at once. Per-image body count."""
+        self._require_body()
+        counts: list[int] = []
+        for img in images:
+            if cropped:
+                counts.append(1 if self.enroll_body_crop(person_id, img) else 0)
+            else:
+                counts.append(self.enroll_body_frame(person_id, img))
+        return counts
+
     # --- recognition ---
     def recognize_frame(self, img_bgr: np.ndarray) -> list[RecognizedFace]:
         """Locate every face in a frame and match each against saved faces."""

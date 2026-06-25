@@ -27,6 +27,10 @@ All `/v1/*` requests MUST send header `X-API-Key: <API_KEY>`.
 | GET | `/healthz` | — | `{status, providers, on_gpu, gallery_size, people, body_enabled, body_on_gpu, body_gallery_size}` |
 | POST | `/v1/enroll` | `person_id` (str), `file` (image), `cropped` (bool, default false) | `{person_id, enrolled}` |
 | POST | `/v1/enroll/batch` | `person_id` (str), `files` (many images), `cropped` (bool) | `{person_id, images, enrolled, per_image}` |
+| POST | `/v1/enroll/body` | `person_id`, `file`, `cropped` — **body enabled only** | `{person_id, enrolled}` |
+| POST | `/v1/enroll/body/batch` | `person_id`, `files` (many), `cropped` — **body only** | `{person_id, images, enrolled, per_image}` |
+| GET | `/v1/body/identities` | — **body only** | `{count, people: [str]}` |
+| DELETE | `/v1/body/identities/{person_id}` | — **body only** | `{ok, detail}` |
 | POST | `/v1/recognize` | `file` (image), `cropped` (bool, default false) | `{faces: [...]}` (+ `persons`, `bodies` when body on) |
 | GET | `/v1/identities` | — | `{count, people: [str]}` |
 | DELETE | `/v1/identities/{person_id}` | — | `{ok, detail}` |
@@ -149,16 +153,21 @@ Optional, opt-in (`FACESTACK_ENABLE_BODY=1` on the server; off by default). When
 on, FaceStack also detects each person's **body** and can identify them from it
 when the face is missing — useful for someone far away or turned away.
 
-**How identities link (automatic, no extra API):** there is *no* body-enroll
-call. Whenever a body's face is recognised confidently, that body's appearance is
-auto-saved under the same `person_id`. Later, a body with no visible/matched face
-is looked up against that body gallery. So the flow is: enroll faces as usual →
-let people be seen face-first once → they become recognisable body-only.
+Two ways a body gets into the gallery, both keyed by the same `person_id`:
 
-**Important — body recognition is appearance/clothing based**, so it is
-**day-scoped**: embeddings expire after a TTL (default 24h) and accuracy drops if
-someone changes clothes or across days. It shines within the same session / day /
-camera set, not as a durable cross-day identity like the face gallery.
+1. **Automatic (day-scoped):** whenever a body's face is recognised confidently,
+   that body is auto-saved under the matched `person_id`. These expire after the
+   TTL (default 24h). Zero setup — enroll faces, let people be seen face-first.
+2. **Manual (permanent), like the face gallery:** explicitly enrol body photos
+   with `POST /v1/enroll/body` / `/v1/enroll/body/batch` (or
+   `scripts/enroll_dataset.py --target body`). These **never expire**. Capture a
+   few angles — **front, side, and back** — so someone is recognised even turned
+   away. Manage with `GET`/`DELETE /v1/body/identities`.
+
+**Important — body recognition is appearance/clothing based.** Even permanent
+enrollments degrade when someone changes clothes or across days — unlike the
+biometric face gallery. It is reliable within a consistent-clothing context
+(same session/day, uniforms, controlled setting), not as a durable cross-day ID.
 
 `GET /healthz` reports `body_enabled`, `body_on_gpu`, `body_gallery_size`.
 

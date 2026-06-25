@@ -100,10 +100,28 @@ when the face is not visible. **There is no body-enroll endpoint:** when a body'
 face is recognised confidently, that body is auto-enrolled under the same
 `person_id`; later, a faceless body is matched against that body gallery.
 
-Body ReID is **appearance/clothing based and day-scoped** — embeddings expire
-after `FACESTACK_BODY_TTL_SECONDS` (default 86400) and degrade across outfits/days.
-Tune `FACESTACK_BODY_MATCH_THRESHOLD` (default 0.5) separately from the face one.
-`POST /v1/index/save|load` persist the body gallery alongside the face gallery.
+You can also **explicitly enrol bodies, like faces** — permanent (never expire),
+ideal for capturing multiple angles (front/side/back) so someone is recognised
+turned away. Auto-enrolled bodies stay day-scoped; both live under one `person_id`.
+
+```bash
+# one body photo                              # several angles at once
+curl -H "X-API-Key:$KEY" -F person_id=ahmet -F file=@ahmet_back.jpg   $BASE/v1/enroll/body
+curl -H "X-API-Key:$KEY" -F person_id=ahmet \
+     -F files=@front.jpg -F files=@side.jpg -F files=@back.jpg        $BASE/v1/enroll/body/batch
+curl -H "X-API-Key:$KEY" $BASE/v1/body/identities          # list bodies enrolled
+curl -H "X-API-Key:$KEY" -X DELETE $BASE/v1/body/identities/ahmet
+# bulk from a folder tree:
+python scripts/enroll_dataset.py dataset --target body --base-url $BASE --api-key "$KEY"
+```
+Body-enroll endpoints return `503` when body recognition is disabled, `422` if no
+body is found. `POST /v1/index/save|load` persist the body gallery (incl. which
+entries are permanent) alongside the face gallery.
+
+Body ReID is **appearance/clothing based** — even permanent enrollments degrade
+across outfits/days (unlike the biometric face gallery), and auto-enrolled bodies
+also expire after `FACESTACK_BODY_TTL_SECONDS` (default 86400). Tune
+`FACESTACK_BODY_MATCH_THRESHOLD` (default 0.5) separately from the face one.
 
 `POST /v1/recognize` then adds two arrays to the response:
 

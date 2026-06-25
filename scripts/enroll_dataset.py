@@ -42,7 +42,13 @@ def main() -> int:
     ap.add_argument("root", nargs="?", default="dataset", help="dataset root (one folder per person)")
     ap.add_argument("--base-url", default=os.environ.get("FACESTACK_BASE_URL", "http://127.0.0.1:8011"))
     ap.add_argument("--api-key", default=os.environ.get("FACESTACK_API_KEY", ""))
-    ap.add_argument("--cropped", action="store_true", help="images are already tight face crops")
+    ap.add_argument("--cropped", action="store_true", help="images are already tight crops")
+    ap.add_argument(
+        "--target",
+        choices=("face", "body", "both"),
+        default="face",
+        help="enrol faces, bodies (permanent ReID gallery), or both",
+    )
     ap.add_argument("--no-save", action="store_true", help="don't call /v1/index/save at the end")
     ap.add_argument("--timeout", type=float, default=120.0)
     args = ap.parse_args()
@@ -59,46 +65,51 @@ def main() -> int:
         print(f"ERROR: no person sub-folders under {root}")
         return 1
 
-    print(f"Enrolling {len(people)} people from {root} -> {base}\n")
-    total_faces, total_imgs, failures = 0, 0, 0
+    # face -> /v1/enroll/batch ; body -> /v1/enroll/body/batch (permanent gallery)
+    targets = {"face": ["face"], "body": ["body"], "both": ["face", "body"]}[args.target]
+    endpoints = {"face": "/v1/enroll/batch", "body": "/v1/enroll/body/batch"}
+
+    print(f"Enrolling {len(people)} people from {root} -> {base} (target={args.target})\n")
+    total, total_imgs, failures = 0, 0, 0
     for folder in people:
         person = folder.name
         imgs = _images(folder)
         if not imgs:
             print(f"  {person}: no images, skipped")
             continue
-        opened = [(p, open(p, "rb")) for p in imgs]
-        try:
-            r = requests.post(
-                f"{base}/v1/enroll/batch",
-                headers=headers,
-                data={"person_id": person, "cropped": str(args.cropped).lower()},
-                files=[("files", f) for _, f in opened],
-                timeout=args.timeout,
-            )
-        finally:
-            for _, f in opened:
-                f.close()
-
-        if r.ok:
-            d = r.json()
-            total_faces += d["enrolled"]
-            total_imgs += d["images"]
-            blank = [imgs[i].name for i, c in enumerate(d["per_image"]) if c == 0]
-            note = f"  ({len(blank)} with no face: {', '.join(blank)})" if blank else ""
-            print(f"  {person}: {d['enrolled']} faces from {d['images']} images{note}")
-        else:
-            failures += 1
-            detail = r.text
+        for kind in targets:
+            opened = [open(p, "rb") for p in imgs]
             try:
-                detail = r.json().get("detail", detail)
-            except Exception:  # noqa: BLE001
-                pass
-            print(f"  {person}: FAILED ({r.status_code}: {detail})")
+                r = requests.post(
+                    f"{base}{endpoints[kind]}",
+                    headers=headers,
+                    data={"person_id": person, "cropped": str(args.cropped).lower()},
+                    files=[("files", f) for f in opened],
+                    timeout=args.timeout,
+                )
+            finally:
+                for f in opened:
+                    f.close()
 
-    print(f"\nTotal: {total_faces} faces from {total_imgs} images, {failures} people failed")
+            if r.ok:
+                d = r.json()
+                total += d["enrolled"]
+                total_imgs += d["images"]
+                blank = [imgs[i].name for i, c in enumerate(d["per_image"]) if c == 0]
+                note = f"  ({len(blank)} with no {kind}: {', '.join(blank)})" if blank else ""
+                print(f"  {person} [{kind}]: {d['enrolled']} from {d['images']} images{note}")
+            else:
+                failures += 1
+                detail = r.text
+                try:
+                    detail = r.json().get("detail", detail)
+                except Exception:  # noqa: BLE001
+                    pass
+                print(f"  {person} [{kind}]: FAILED ({r.status_code}: {detail})")
 
-    if not args.no_save and total_faces:
+    print(f"\nTotal: {total} embeddings from {total_imgs} image-passes, {failures} failed")
+
+    if not args.no_save and total:
         r = requests.post(f"{base}/v1/index/save", headers=headers, timeout=args.timeout)
         print("Saved gallery." if r.ok else f"Save FAILED ({r.status_code})")
     return 1 if failures else 0

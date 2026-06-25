@@ -176,6 +176,47 @@ def create_app(config: Config | None = None) -> FastAPI:
             person_id=person_id, images=len(images), enrolled=total, per_image=per_image
         )
 
+    def _require_body() -> None:
+        if not getattr(rec(), "_body_enabled", False):
+            raise HTTPException(
+                status_code=503, detail="Body recognition is disabled (FACESTACK_ENABLE_BODY=1)"
+            )
+
+    @v1.post("/enroll/body", response_model=EnrollResponse)
+    async def enroll_body(
+        person_id: str = Form(...),
+        file: UploadFile = File(...),
+        cropped: bool = Form(False),
+    ) -> EnrollResponse:
+        """Permanently enroll a body photo (front/side/back) — like /v1/enroll but
+        for the body gallery. These never expire (unlike auto-enrolled bodies)."""
+        _require_body()
+        img = _decode(await file.read())
+        if cropped:
+            count = 1 if rec().enroll_body_crop(person_id, img) else 0
+        else:
+            count = rec().enroll_body_frame(person_id, img)
+        if count == 0:
+            raise HTTPException(status_code=422, detail="No body could be enrolled")
+        return EnrollResponse(person_id=person_id, enrolled=count)
+
+    @v1.post("/enroll/body/batch", response_model=BatchEnrollResponse)
+    async def enroll_body_batch(
+        person_id: str = Form(...),
+        files: list[UploadFile] = File(...),
+        cropped: bool = Form(False),
+    ) -> BatchEnrollResponse:
+        """Permanently enroll several body photos of one person (multi-angle)."""
+        _require_body()
+        images = [_decode(await f.read()) for f in files]
+        per_image = rec().enroll_body_images(person_id, images, cropped=cropped)
+        total = sum(per_image)
+        if total == 0:
+            raise HTTPException(status_code=422, detail="No body could be enrolled from any image")
+        return BatchEnrollResponse(
+            person_id=person_id, images=len(images), enrolled=total, per_image=per_image
+        )
+
     @v1.post("/recognize", response_model=RecognizeResponse)
     async def recognize(
         file: UploadFile = File(...),
@@ -242,6 +283,20 @@ def create_app(config: Config | None = None) -> FastAPI:
         if removed == 0:
             raise HTTPException(status_code=404, detail="Unknown person_id")
         return OkResponse(detail=f"Removed {removed} embeddings")
+
+    @v1.get("/body/identities", response_model=IdentitiesResponse)
+    def body_identities() -> IdentitiesResponse:
+        _require_body()
+        people = rec().body_index.people
+        return IdentitiesResponse(count=len(people), people=people)
+
+    @v1.delete("/body/identities/{person_id}", response_model=OkResponse)
+    def delete_body_identity(person_id: str) -> OkResponse:
+        _require_body()
+        removed = rec().body_index.remove_person(person_id)
+        if removed == 0:
+            raise HTTPException(status_code=404, detail="Unknown person_id")
+        return OkResponse(detail=f"Removed {removed} body embeddings")
 
     @v1.post("/index/save", response_model=OkResponse)
     def index_save() -> OkResponse:

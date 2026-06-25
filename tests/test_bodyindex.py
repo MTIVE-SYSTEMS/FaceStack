@@ -134,6 +134,34 @@ def test_save_and_load_preserves_timestamps(tmp_path):
     assert m is None or m.person_id != "alice"
 
 
+def test_permanent_embedding_never_expires_or_purges():
+    idx = BodyIndex(dim=512, threshold=0.4)
+    base = _vec(1)
+    # Enrolled long ago, but permanent -> must survive TTL and purge (like a face).
+    idx.add("alice", base, ts=NOW - 100 * TTL, permanent=True)
+
+    # Found well past the TTL window.
+    m = idx.recognize(base, now=NOW, ttl=TTL)
+    assert m is not None and m.person_id == "alice"
+    # Purge removes nothing (permanent is exempt) and the match still stands.
+    assert idx.purge(now=NOW, ttl=TTL) == 0
+    assert idx.recognize(base, now=NOW, ttl=TTL).person_id == "alice"
+
+
+def test_permanent_flag_survives_save_load(tmp_path):
+    idx = BodyIndex(dim=512, threshold=0.4)
+    a = _vec(1)
+    idx.add("alice", a, ts=NOW - 100 * TTL, permanent=True)
+    idx.add("bob", _vec(2), ts=NOW)  # day-scoped
+
+    ip, mp = str(tmp_path / "b.bin"), str(tmp_path / "b.meta.json")
+    idx.save(ip, mp)
+    loaded = BodyIndex.load(ip, mp)
+    # alice's permanence persisted: still found far past expiry after reload.
+    assert loaded.recognize(a, now=NOW, ttl=TTL).person_id == "alice"
+    assert loaded.purge(now=NOW, ttl=TTL) == 0  # permanent alice exempt; bob still fresh
+
+
 def test_empty_gallery_returns_none():
     idx = BodyIndex(dim=512)
     assert idx.recognize(_vec(1), now=NOW, ttl=TTL) is None

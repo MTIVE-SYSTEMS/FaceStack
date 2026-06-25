@@ -87,6 +87,51 @@ class FaceStackClient:
                     f.close()
         return self._check(r)
 
+    def enroll_body(self, person_id: str, image: str | bytes | BinaryIO, cropped: bool = False) -> dict:
+        """Permanently enroll one body photo (front/side/back) for person_id."""
+        f = self._as_file(image)
+        try:
+            r = requests.post(
+                self._url("/v1/enroll/body"),
+                headers=self._headers,
+                data={"person_id": person_id, "cropped": str(cropped).lower()},
+                files={"file": f},
+                timeout=self.timeout,
+            )
+        finally:
+            if hasattr(f, "close"):
+                f.close()
+        return self._check(r)
+
+    def enroll_body_batch(
+        self, person_id: str, images: list[str | bytes | BinaryIO], cropped: bool = False
+    ) -> dict:
+        """Permanently enroll several body photos of one person (multi-angle)."""
+        opened = [self._as_file(im) for im in images]
+        try:
+            r = requests.post(
+                self._url("/v1/enroll/body/batch"),
+                headers=self._headers,
+                data={"person_id": person_id, "cropped": str(cropped).lower()},
+                files=[("files", f) for f in opened],
+                timeout=self.timeout,
+            )
+        finally:
+            for f in opened:
+                if hasattr(f, "close"):
+                    f.close()
+        return self._check(r)
+
+    def body_identities(self) -> dict:
+        r = requests.get(self._url("/v1/body/identities"), headers=self._headers, timeout=self.timeout)
+        return self._check(r)
+
+    def delete_body_identity(self, person_id: str) -> dict:
+        r = requests.delete(
+            self._url(f"/v1/body/identities/{person_id}"), headers=self._headers, timeout=self.timeout
+        )
+        return self._check(r)
+
     def recognize(self, image: str | bytes | BinaryIO, cropped: bool = False) -> list[dict]:
         f = self._as_file(image)
         try:
