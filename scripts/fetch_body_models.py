@@ -10,6 +10,11 @@ the service loads these with bare onnxruntime; this script only fetches them.
 The runtime stays torch-free: there is NO official Ultralytics .onnx release
 asset (only yolov8n.pt), so we pull pre-exported ONNX mirrors. To pin a model to
 your own release storage, just point the URL at it.
+
+This fetches the lightweight default ReID model (osnet_x0_25). For notably
+stronger cross-view matching (recognising people turned away / from other
+angles), export osnet_ain_x1_0 with scripts/export_reid_onnx.py and point
+FACESTACK_BODY_REID_PATH at it (drop-in: 512-d, 256x128).
 """
 
 from __future__ import annotations

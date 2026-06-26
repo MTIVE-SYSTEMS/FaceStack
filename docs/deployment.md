@@ -105,3 +105,24 @@ curl -s http://127.0.0.1:8011/healthz
 auto-populated (a person seen face-first becomes body-recognisable) and persists
 via `/v1/index/save`. See [api.md](api.md#body-recognition-person-reid) for the
 response shape.
+
+### Stronger ReID model (recommended for cross-view / "turned away")
+
+`fetch_body_models.py` installs the lightweight `osnet_x0_25`. For notably better
+matching from the side/back or across cameras, use **`osnet_ain_x1_0`** (domain-
+generalizable; 512-d, 256x128 — a drop-in):
+
+```bash
+# one-off export in a throwaway env (the runtime stays torch-free)
+python scripts/export_reid_onnx.py --model osnet_ain_x1_0 --out osnet_ain_x1_0_msmt17.onnx
+cp osnet_ain_x1_0_msmt17.onnx ~/.facestack/models/
+# point the service at it + restart
+#   add to the unit:  Environment=FACESTACK_BODY_REID_PATH=%h/.facestack/models/osnet_ain_x1_0_msmt17.onnx
+systemctl --user daemon-reload && systemctl --user restart facestack
+```
+
+> Changing the ReID model invalidates existing body embeddings (different model =
+> different vector space). Wipe the body gallery (`indexes/bodies.*`) and re-enrol.
+> Body ReID is still appearance/clothing based — recognising someone turned away
+> also needs **back/side photos in the gallery** (`/v1/enroll/body/batch`), not
+> just a better model. Recalibrate `FACESTACK_BODY_MATCH_THRESHOLD` afterwards.
